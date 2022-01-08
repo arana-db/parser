@@ -76,28 +76,8 @@ import (
 	hintResourceGroup       "RESOURCE_GROUP"
 	hintQBName              "QB_NAME"
 
-	/* TiDB hint names */
-	hintAggToCop              "AGG_TO_COP"
-	hintIgnorePlanCache       "IGNORE_PLAN_CACHE"
-	hintHashAgg               "HASH_AGG"
-	hintIgnoreIndex           "IGNORE_INDEX"
-	hintInlHashJoin           "INL_HASH_JOIN"
-	hintInlJoin               "INL_JOIN"
-	hintInlMergeJoin          "INL_MERGE_JOIN"
-	hintMemoryQuota           "MEMORY_QUOTA"
-	hintNoSwapJoinInputs      "NO_SWAP_JOIN_INPUTS"
-	hintQueryType             "QUERY_TYPE"
-	hintReadConsistentReplica "READ_CONSISTENT_REPLICA"
-	hintReadFromStorage       "READ_FROM_STORAGE"
-	hintSMJoin                "MERGE_JOIN"
-	hintStreamAgg             "STREAM_AGG"
-	hintSwapJoinInputs        "SWAP_JOIN_INPUTS"
-	hintUseIndexMerge         "USE_INDEX_MERGE"
-	hintUseIndex              "USE_INDEX"
-	hintUsePlanCache          "USE_PLAN_CACHE"
-	hintUseToja               "USE_TOJA"
-	hintTimeRange             "TIME_RANGE"
-	hintUseCascades           "USE_CASCADES"
+	/* arana hint names */
+	hintXID "XID"
 
 	/* Other keywords */
 	hintOLAP            "OLAP"
@@ -120,23 +100,16 @@ import (
 	UnsupportedTableLevelOptimizerHintName
 	SupportedTableLevelOptimizerHintName
 	UnsupportedIndexLevelOptimizerHintName
-	SupportedIndexLevelOptimizerHintName
 	SubqueryOptimizerHintName
-	BooleanHintName                        "name of hints which take a boolean input"
 	NullaryHintName                        "name of hints which take no input"
 	SubqueryStrategy
 	Value                                  "the value in the SET_VAR() hint"
-	HintQueryType                          "query type in optimizer hint (OLAP or OLTP)"
-	HintStorageType                        "storage type in optimizer hint (TiKV or TiFlash)"
 
 %type	<number>
-	UnitOfBytes "unit of bytes (MB or GB)"
 	CommaOpt    "optional ','"
 
 %type	<hints>
 	OptimizerHintList           "optimizer hint list"
-	StorageOptimizerHintOpt     "storage level optimizer hint"
-	HintStorageTypeAndTableList "storage type and tables list in optimizer hint"
 
 %type	<hint>
 	TableOptimizerHintOpt   "optimizer hint"
@@ -147,8 +120,6 @@ import (
 	IndexNameListOpt        "optional index list in optimizer hint"
 	SubqueryStrategies      "subquery strategies"
 	SubqueryStrategiesOpt   "optional subquery strategies"
-	HintTrueOrFalse         "true or false in optimizer hint"
-	HintStorageTypeAndTable "storage type and tables in optimizer hint"
 
 %type	<table>
 	HintTable "Table in optimizer hint"
@@ -179,14 +150,6 @@ OptimizerHintList:
 			$$ = $1
 		}
 	}
-|	StorageOptimizerHintOpt
-	{
-		$$ = $1
-	}
-|	OptimizerHintList CommaOpt StorageOptimizerHintOpt
-	{
-		$$ = append($1, $3...)
-	}
 
 TableOptimizerHintOpt:
 	"JOIN_FIXED_ORDER" '(' QueryBlockOpt ')'
@@ -204,22 +167,10 @@ TableOptimizerHintOpt:
 		parser.warnUnsupportedHint($1)
 		$$ = nil
 	}
-|	SupportedTableLevelOptimizerHintName '(' HintTableListOpt ')'
-	{
-		h := $3
-		h.HintName = model.NewCIStr($1)
-		$$ = h
-	}
 |	UnsupportedIndexLevelOptimizerHintName '(' HintIndexList ')'
 	{
 		parser.warnUnsupportedHint($1)
 		$$ = nil
-	}
-|	SupportedIndexLevelOptimizerHintName '(' HintIndexList ')'
-	{
-		h := $3
-		h.HintName = model.NewCIStr($1)
-		$$ = h
 	}
 |	SubqueryOptimizerHintName '(' QueryBlockOpt SubqueryStrategiesOpt ')'
 	{
@@ -251,38 +202,7 @@ TableOptimizerHintOpt:
 			QBName:   model.NewCIStr($3),
 		}
 	}
-|	"MEMORY_QUOTA" '(' QueryBlockOpt hintIntLit UnitOfBytes ')'
-	{
-		maxValue := uint64(math.MaxInt64) / $5
-		if $4 <= maxValue {
-			$$ = &ast.TableOptimizerHint{
-				HintName: model.NewCIStr($1),
-				HintData: int64($4 * $5),
-				QBName:   model.NewCIStr($3),
-			}
-		} else {
-			yylex.AppendError(ErrWarnMemoryQuotaOverflow.GenWithStackByArgs(math.MaxInt64))
-			parser.lastErrorAsWarn()
-			$$ = nil
-		}
-	}
-|	"TIME_RANGE" '(' hintStringLit CommaOpt hintStringLit ')'
-	{
-		$$ = &ast.TableOptimizerHint{
-			HintName: model.NewCIStr($1),
-			HintData: ast.HintTimeRange{
-				From: $3,
-				To:   $5,
-			},
-		}
-	}
-|	BooleanHintName '(' QueryBlockOpt HintTrueOrFalse ')'
-	{
-		h := $4
-		h.HintName = model.NewCIStr($1)
-		h.QBName = model.NewCIStr($3)
-		$$ = h
-	}
+
 |	NullaryHintName '(' QueryBlockOpt ')'
 	{
 		$$ = &ast.TableOptimizerHint{
@@ -290,46 +210,13 @@ TableOptimizerHintOpt:
 			QBName:   model.NewCIStr($3),
 		}
 	}
-|	"QUERY_TYPE" '(' QueryBlockOpt HintQueryType ')'
-	{
-		$$ = &ast.TableOptimizerHint{
-			HintName: model.NewCIStr($1),
-			QBName:   model.NewCIStr($3),
-			HintData: model.NewCIStr($4),
-		}
-	}
-
-StorageOptimizerHintOpt:
-	"READ_FROM_STORAGE" '(' QueryBlockOpt HintStorageTypeAndTableList ')'
-	{
-		hs := $4
-		name := model.NewCIStr($1)
-		qb := model.NewCIStr($3)
-		for _, h := range hs {
-			h.HintName = name
-			h.QBName = qb
-		}
-		$$ = hs
-	}
-
-HintStorageTypeAndTableList:
-	HintStorageTypeAndTable
-	{
-		$$ = []*ast.TableOptimizerHint{$1}
-	}
-|	HintStorageTypeAndTableList ',' HintStorageTypeAndTable
-	{
-		$$ = append($1, $3)
-	}
-
-HintStorageTypeAndTable:
-	HintStorageType '[' HintTableList ']'
-	{
-		h := $3
-		h.HintData = model.NewCIStr($1)
-		$$ = h
-	}
-
+|   "XID" '(' Value ')'
+    {
+    	$$ = &ast.TableOptimizerHint{
+            HintName: model.NewCIStr($1),
+            HintData: model.NewCIStr($3),
+        }
+    }
 QueryBlockOpt:
 	/* empty */
 	{
@@ -448,26 +335,6 @@ Value:
 		$$ = strconv.FormatUint($1, 10)
 	}
 
-UnitOfBytes:
-	"MB"
-	{
-		$$ = 1024 * 1024
-	}
-|	"GB"
-	{
-		$$ = 1024 * 1024 * 1024
-	}
-
-HintTrueOrFalse:
-	"TRUE"
-	{
-		$$ = &ast.TableOptimizerHint{HintData: true}
-	}
-|	"FALSE"
-	{
-		$$ = &ast.TableOptimizerHint{HintData: false}
-	}
-
 JoinOrderOptimizerHintName:
 	"JOIN_ORDER"
 |	"JOIN_PREFIX"
@@ -484,13 +351,7 @@ UnsupportedTableLevelOptimizerHintName:
 |	"NO_MERGE"
 
 SupportedTableLevelOptimizerHintName:
-	"MERGE_JOIN"
-|	"INL_JOIN"
-|	"INL_HASH_JOIN"
-|	"SWAP_JOIN_INPUTS"
-|	"NO_SWAP_JOIN_INPUTS"
-|	"INL_MERGE_JOIN"
-|	"HASH_JOIN"
+	"HASH_JOIN"
 
 UnsupportedIndexLevelOptimizerHintName:
 	"INDEX_MERGE"
@@ -502,11 +363,6 @@ UnsupportedIndexLevelOptimizerHintName:
 |	"SKIP_SCAN"
 |	"NO_SKIP_SCAN"
 
-SupportedIndexLevelOptimizerHintName:
-	"USE_INDEX"
-|	"IGNORE_INDEX"
-|	"USE_INDEX_MERGE"
-
 SubqueryOptimizerHintName:
 	"SEMIJOIN"
 |	"NO_SEMIJOIN"
@@ -517,26 +373,8 @@ SubqueryStrategy:
 |	"LOOSESCAN"
 |	"MATERIALIZATION"
 
-BooleanHintName:
-	"USE_TOJA"
-|	"USE_CASCADES"
-
 NullaryHintName:
-	"USE_PLAN_CACHE"
-|	"HASH_AGG"
-|	"STREAM_AGG"
-|	"AGG_TO_COP"
-|	"NO_INDEX_MERGE"
-|	"READ_CONSISTENT_REPLICA"
-|	"IGNORE_PLAN_CACHE"
-
-HintQueryType:
-	"OLAP"
-|	"OLTP"
-
-HintStorageType:
-	"TIKV"
-|	"TIFLASH"
+	"NO_INDEX_MERGE"
 
 Identifier:
 	hintIdentifier
@@ -567,28 +405,6 @@ Identifier:
 |	"SET_VAR"
 |	"RESOURCE_GROUP"
 |	"QB_NAME"
-/* TiDB hint names */
-|	"AGG_TO_COP"
-|	"IGNORE_PLAN_CACHE"
-|	"HASH_AGG"
-|	"IGNORE_INDEX"
-|	"INL_HASH_JOIN"
-|	"INL_JOIN"
-|	"INL_MERGE_JOIN"
-|	"MEMORY_QUOTA"
-|	"NO_SWAP_JOIN_INPUTS"
-|	"QUERY_TYPE"
-|	"READ_CONSISTENT_REPLICA"
-|	"READ_FROM_STORAGE"
-|	"MERGE_JOIN"
-|	"STREAM_AGG"
-|	"SWAP_JOIN_INPUTS"
-|	"USE_INDEX_MERGE"
-|	"USE_INDEX"
-|	"USE_PLAN_CACHE"
-|	"USE_TOJA"
-|	"TIME_RANGE"
-|	"USE_CASCADES"
 /* other keywords */
 |	"OLAP"
 |	"OLTP"
