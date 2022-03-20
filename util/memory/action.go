@@ -34,8 +34,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dubbogo/parser/errno"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/errno"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )

@@ -35,7 +35,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"

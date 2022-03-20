@@ -31,10 +31,10 @@
 package ast_test
 
 import (
-	"github.com/dubbogo/parser"
-	. "github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/test_driver"
+	"github.com/arana-db/parser"
+	. "github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/test_driver"
 	. "github.com/pingcap/check"
 )
 

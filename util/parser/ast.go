@@ -31,7 +31,7 @@
 package parser
 
 import (
-	"github.com/dubbogo/parser/ast"
+	"github.com/arana-db/parser/ast"
 )
 
 // GetDefaultDB checks if all columns in the AST have explicit DBName. If not, return specified DBName.

@@ -33,11 +33,11 @@ package types
 import (
 	"strconv"
 
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/tidb-types/json"
-	ast "github.com/dubbogo/parser/types"
-	utilMath "github.com/dubbogo/parser/util/math"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/tidb-types/json"
+	ast "github.com/arana-db/parser/types"
+	utilMath "github.com/arana-db/parser/util/math"
 )
 
 // UnspecifiedLength is unspecified length.

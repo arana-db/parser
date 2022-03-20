@@ -34,7 +34,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/dubbogo/parser/util/collate"
+	"github.com/arana-db/parser/util/collate"
 )
 
 // CompareInt64 returns an integer comparing the int64 x to y.

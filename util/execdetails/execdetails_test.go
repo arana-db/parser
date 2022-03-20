@@ -36,7 +36,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dubbogo/parser/util/stringutil"
+	"github.com/arana-db/parser/util/stringutil"
 	. "github.com/pingcap/check"
 )
 

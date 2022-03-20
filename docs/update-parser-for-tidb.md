@@ -18,7 +18,7 @@ Suppose the forked repository is `https://github.com/your-repo/parser`.
 1. In your TiDB repository, execute the `replace` instruction to make your parser changes take effect:
 
     ```
-    GO111MODULE=on go mod edit -replace github.com/dubbogo/parser=github.com/your-repo/parser@your-branch
+    GO111MODULE=on go mod edit -replace github.com/arana-db/parser=github.com/your-repo/parser@your-branch
     ```
 
 2. `make dev` to run CI in TiDB.
@@ -36,7 +36,7 @@ This PR will be reviewed, and if everything goes well, it will be merged.
 In your TiDB pull request, modify the `go.mod` file manually or use this command:
 
 ```
-GO111MODULE=on go get -u github.com/dubbogo/parser@master
+GO111MODULE=on go get -u github.com/arana-db/parser@master
 ```
 
 Make sure the `replace` instruction is changed back to the `require` instruction and the version is the latest.

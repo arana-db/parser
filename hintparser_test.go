@@ -33,10 +33,10 @@ package parser_test
 import (
 	. "github.com/pingcap/check"
 
-	"github.com/dubbogo/parser"
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/mysql"
 )
 
 var _ = Suite(&testHintParserSuite{})

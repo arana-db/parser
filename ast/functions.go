@@ -36,9 +36,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/types"
 	"github.com/pingcap/errors"
 )
 

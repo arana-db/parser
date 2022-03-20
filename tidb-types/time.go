@@ -40,11 +40,11 @@ import (
 	gotime "time"
 	"unicode"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/sessionctx/stmtctx"
-	"github.com/dubbogo/parser/terror"
-	tidbMath "github.com/dubbogo/parser/util/math"
-	"github.com/dubbogo/parser/util/parser"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/sessionctx/stmtctx"
+	"github.com/arana-db/parser/terror"
+	tidbMath "github.com/arana-db/parser/util/math"
+	"github.com/arana-db/parser/util/parser"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 )

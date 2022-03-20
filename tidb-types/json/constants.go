@@ -34,8 +34,8 @@ import (
 	"encoding/binary"
 	"unicode/utf8"
 
-	mysql "github.com/dubbogo/parser/errno"
-	"github.com/dubbogo/parser/terror"
+	mysql "github.com/arana-db/parser/errno"
+	"github.com/arana-db/parser/terror"
 )
 
 // TypeCode indicates JSON type.

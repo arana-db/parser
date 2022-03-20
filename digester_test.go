@@ -31,7 +31,7 @@
 package parser_test
 
 import (
-	"github.com/dubbogo/parser"
+	"github.com/arana-db/parser"
 	. "github.com/pingcap/check"
 )
 

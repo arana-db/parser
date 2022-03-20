@@ -20,8 +20,8 @@ import __yyfmt__ "fmt"
 import (
 	"strconv"
 
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/model"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/model"
 )
 
 type yyhintSymType struct {

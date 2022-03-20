@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser/mysql"
 	. "github.com/pingcap/check"
 )
 

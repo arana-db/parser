@@ -31,9 +31,9 @@
 package types
 
 import (
-	mysql "github.com/dubbogo/parser/errno"
-	"github.com/dubbogo/parser/terror"
-	parser_types "github.com/dubbogo/parser/types"
+	mysql "github.com/arana-db/parser/errno"
+	"github.com/arana-db/parser/terror"
+	parser_types "github.com/arana-db/parser/types"
 )
 
 // const strings for ErrWrongValue

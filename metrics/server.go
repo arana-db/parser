@@ -33,7 +33,7 @@ package metrics
 import (
 	"strconv"
 
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )

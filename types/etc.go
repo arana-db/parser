@@ -37,8 +37,8 @@ package types
 import (
 	"strings"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 )
 
 // IsTypeBlob returns a boolean indicating whether the tp is a blob type.

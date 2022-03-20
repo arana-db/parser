@@ -33,7 +33,7 @@ package collate
 import (
 	"unicode/utf8"
 
-	"github.com/dubbogo/parser/util/stringutil"
+	"github.com/arana-db/parser/util/stringutil"
 )
 
 type generalCICollator struct {

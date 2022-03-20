@@ -33,7 +33,7 @@ package opcode
 import (
 	"io"
 
-	"github.com/dubbogo/parser/format"
+	"github.com/arana-db/parser/format"
 )
 
 // Op is opcode type.

@@ -37,11 +37,11 @@ package types
 import (
 	"io"
 
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/opcode"
-	"github.com/dubbogo/parser/terror"
-	ast "github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/opcode"
+	"github.com/arana-db/parser/terror"
+	ast "github.com/arana-db/parser/types"
 	"github.com/pingcap/errors"
 )
 

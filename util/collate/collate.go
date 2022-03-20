@@ -34,9 +34,9 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"

@@ -33,7 +33,7 @@ package parser
 import (
 	"strings"
 
-	"github.com/dubbogo/parser/charset"
+	"github.com/arana-db/parser/charset"
 )
 
 func isLetter(ch rune) bool {

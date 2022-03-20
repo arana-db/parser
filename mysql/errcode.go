@@ -985,5 +985,5 @@ const (
 	ErrWarnOptimizerHintInvalidInteger  = 8065
 
 	// Stop adding error code here!
-	// They are moved to github.com/dubbogo/parser/errno
+	// They are moved to github.com/arana-db/parser/errno
 )

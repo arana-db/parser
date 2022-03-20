@@ -37,14 +37,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dubbogo/parser"
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/charset"
-	. "github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
-	"github.com/dubbogo/parser/test_driver"
+	"github.com/arana-db/parser"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/charset"
+	. "github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
+	"github.com/arana-db/parser/test_driver"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 )
@@ -144,7 +144,7 @@ func (s *testParserSuite) TestSimple(c *C) {
 
 	// Testcase for /*! xx */
 	// See http://dev.mysql.com/doc/refman/5.7/en/comments.html
-	// Fix: https://github.com/dubbogo/parser/issues/971
+	// Fix: https://github.com/arana-db/parser/issues/971
 	src = "/*!40101 SET character_set_client = utf8 */;"
 	stmts, _, err = parser.Parse(src, "", "")
 	c.Assert(err, IsNil)
@@ -762,10 +762,10 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"select 1 as a from dual where 1 < any (select 2) order by a", true, "SELECT 1 AS `a` FROM DUAL WHERE 1<ANY (SELECT 2) ORDER BY `a`"},
 		{"select 1 order by 1", true, "SELECT 1 ORDER BY 1"},
 
-		// for https://github.com/dubbogo/parser/issues/320
+		// for https://github.com/arana-db/parser/issues/320
 		{`(select 1);`, true, "SELECT 1"},
 
-		// for https://github.com/dubbogo/parser/issues/1050
+		// for https://github.com/arana-db/parser/issues/1050
 		{`SELECT /*!40001 SQL_NO_CACHE */ * FROM test WHERE 1 limit 0, 2000;`, true, "SELECT SQL_NO_CACHE * FROM `test` WHERE 1 LIMIT 0,2000"},
 
 		{`ANALYZE TABLE t`, true, "ANALYZE TABLE `t`"},
@@ -4735,7 +4735,7 @@ func (wfc *windowFrameBoundChecker) Leave(inNode ast.Node) (node ast.Node, ok bo
 }
 
 // For issue #51
-// See https://github.com/dubbogo/parser/pull/51 for details
+// See https://github.com/arana-db/parser/pull/51 for details
 func (s *testParserSuite) TestVisitFrameBound(c *C) {
 	parser := parser.New()
 	parser.EnableWindowFunc(true)
@@ -4780,7 +4780,7 @@ func (s *testParserSuite) TestFieldText(c *C) {
 	}
 }
 
-// See https://github.com/dubbogo/parser/issue/94
+// See https://github.com/arana-db/parser/issue/94
 func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 	parser := parser.New()
 
@@ -4841,7 +4841,7 @@ func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 	}
 }
 
-// See https://github.com/dubbogo/parser/issue/95
+// See https://github.com/arana-db/parser/issue/95
 func (s *testParserSuite) TestQuotedVariableColumnName(c *C) {
 	parser := parser.New()
 

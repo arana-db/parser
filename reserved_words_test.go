@@ -46,7 +46,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 
-	"github.com/dubbogo/parser/ast"
+	"github.com/arana-db/parser/ast"
 )
 
 func (s *testConsistentSuite) TestCompareReservedWordsWithMySQL(c *C) {

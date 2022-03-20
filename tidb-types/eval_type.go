@@ -30,7 +30,7 @@
 
 package types
 
-import ast "github.com/dubbogo/parser/types"
+import ast "github.com/arana-db/parser/types"
 
 // EvalType indicates the specified types that arguments and result of a built-in function should be.
 type EvalType = ast.EvalType

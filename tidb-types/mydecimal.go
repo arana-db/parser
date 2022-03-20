@@ -34,8 +34,8 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"

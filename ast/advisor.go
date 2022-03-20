@@ -31,7 +31,7 @@
 package ast
 
 import (
-	"github.com/dubbogo/parser/format"
+	"github.com/arana-db/parser/format"
 )
 
 var _ StmtNode = &IndexAdviseStmt{}

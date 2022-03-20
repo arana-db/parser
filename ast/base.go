@@ -30,7 +30,7 @@
 
 package ast
 
-import "github.com/dubbogo/parser/types"
+import "github.com/arana-db/parser/types"
 
 // node is the struct implements node interface except for Accept method.
 // Node implementations should embed it in.

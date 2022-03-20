@@ -1,4 +1,4 @@
-module github.com/dubbogo/parser
+module github.com/arana-db/parser
 
 go 1.15
 

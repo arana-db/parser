@@ -31,8 +31,8 @@
 package ast
 
 import (
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/model"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/model"
 	"github.com/pingcap/errors"
 )
 

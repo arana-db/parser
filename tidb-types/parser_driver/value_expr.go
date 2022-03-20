@@ -35,11 +35,11 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/tidb-types"
-	"github.com/dubbogo/parser/util/hack"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/tidb-types"
+	"github.com/arana-db/parser/util/hack"
 	"github.com/pingcap/errors"
 )
 

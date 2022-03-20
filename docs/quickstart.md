@@ -5,8 +5,8 @@ This is an example showing how to parse a text SQL into an AST tree.
 ```go
 import (
 	"fmt"
-	"github.com/dubbogo/parser"
-	_ "github.com/dubbogo/parser/types/parser_driver"
+	"github.com/arana-db/parser"
+	_ "github.com/arana-db/parser/types/parser_driver"
 )
 
 func example() {
@@ -23,7 +23,7 @@ Let's explain the details line by line.
 ## Import driver
 
 ```go
-import _ "github.com/dubbogo/parser/types/parser_driver"
+import _ "github.com/arana-db/parser/types/parser_driver"
 ```
 
 This means we are using the parser driver provided by TiDB, which decides how to parse the basic data types in SQL, such as numbers, string literals, booleans, nulls, etc.

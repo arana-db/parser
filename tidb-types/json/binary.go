@@ -42,8 +42,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/dubbogo/parser/terror"
-	"github.com/dubbogo/parser/util/hack"
+	"github.com/arana-db/parser/terror"
+	"github.com/arana-db/parser/util/hack"
 	"github.com/pingcap/errors"
 )
 

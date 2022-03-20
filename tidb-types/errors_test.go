@@ -31,8 +31,8 @@
 package types
 
 import (
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 	. "github.com/pingcap/check"
 )
 

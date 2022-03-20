@@ -39,7 +39,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dubbogo/parser/sessionctx/stmtctx"
+	"github.com/arana-db/parser/sessionctx/stmtctx"
 	"github.com/pingcap/errors"
 )
 

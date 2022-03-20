@@ -36,8 +36,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/util/hack"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/util/hack"
 	"github.com/pingcap/errors"
 )
 

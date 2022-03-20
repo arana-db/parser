@@ -33,7 +33,7 @@ package types
 import (
 	"strings"
 
-	"github.com/dubbogo/parser/model"
+	"github.com/arana-db/parser/model"
 )
 
 // FieldName records the names used for mysql protocol.

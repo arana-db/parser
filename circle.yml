@@ -21,7 +21,7 @@ jobs:
   build-ut:
     docker:
       - image: golang:1.13
-    working_directory: /go/src/github.com/dubbogo/parser
+    working_directory: /go/src/github.com/arana-db/parser
     steps:
       - checkout
       - run:
@@ -42,7 +42,7 @@ jobs:
   build-integration:
     docker:
     - image: golang:1.13
-    working_directory: /go/src/github.com/dubbogo/parser
+    working_directory: /go/src/github.com/arana-db/parser
     steps:
     - checkout
     - run:
@@ -53,7 +53,7 @@ jobs:
           cd tidb
           git checkout origin/release-4.0
           rm go.sum
-          GO111MODULE=on go mod edit -replace github.com/dubbogo/parser=github.com/${CIRCLE_PR_USERNAME:-$CIRCLE_PROJECT_USERNAME}/${CIRCLE_PR_REPONAME:-$CIRCLE_PROJECT_REPONAME}@$CIRCLE_SHA1
+          GO111MODULE=on go mod edit -replace github.com/arana-db/parser=github.com/${CIRCLE_PR_USERNAME:-$CIRCLE_PROJECT_USERNAME}/${CIRCLE_PR_REPONAME:-$CIRCLE_PROJECT_REPONAME}@$CIRCLE_SHA1
           # use only 1 thread to minimize memory usage (we've only got 2 CPU + 4 GB on Circle CI).
           make gotest P=1
 workflows:

@@ -39,10 +39,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/sessionctx/stmtctx"
-	"github.com/dubbogo/parser/tidb-types/json"
-	"github.com/dubbogo/parser/util/hack"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/sessionctx/stmtctx"
+	"github.com/arana-db/parser/tidb-types/json"
+	"github.com/arana-db/parser/util/hack"
 	"github.com/pingcap/errors"
 )
 

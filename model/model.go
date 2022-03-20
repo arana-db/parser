@@ -36,9 +36,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dubbogo/parser/auth"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/auth"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/types"
 	"github.com/pingcap/errors"
 )
 
@@ -854,7 +854,7 @@ func NewCIStr(s string) (cs CIStr) {
 
 // UnmarshalJSON implements the user defined unmarshal method.
 // CIStr can be unmarshaled from a single string, so PartitionDefinition.Name
-// in this change https://github.com/dubbogo/parser/pull/6460/files would be
+// in this change https://github.com/arana-db/parser/pull/6460/files would be
 // compatible during TiDB upgrading.
 func (cis *CIStr) UnmarshalJSON(b []byte) error {
 	type T CIStr

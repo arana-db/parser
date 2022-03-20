@@ -34,15 +34,15 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dubbogo/parser"
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/mysql"
-	. "github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/mysql"
+	. "github.com/arana-db/parser/types"
 	. "github.com/pingcap/check"
 
 	// import parser_driver
-	_ "github.com/dubbogo/parser/test_driver"
+	_ "github.com/arana-db/parser/test_driver"
 )
 
 func TestT(t *testing.T) {

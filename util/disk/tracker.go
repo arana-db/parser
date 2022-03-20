@@ -31,7 +31,7 @@
 package disk
 
 import (
-	"github.com/dubbogo/parser/util/memory"
+	"github.com/arana-db/parser/util/memory"
 )
 
 // Tracker is used to track the disk usage during query execution.

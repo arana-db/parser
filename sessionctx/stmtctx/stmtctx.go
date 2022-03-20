@@ -38,12 +38,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dubbogo/parser"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/util/disk"
-	"github.com/dubbogo/parser/util/execdetails"
-	"github.com/dubbogo/parser/util/memory"
+	"github.com/arana-db/parser"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/util/disk"
+	"github.com/arana-db/parser/util/execdetails"
+	"github.com/arana-db/parser/util/memory"
 	"go.uber.org/zap"
 )
 

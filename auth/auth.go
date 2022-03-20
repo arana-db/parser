@@ -36,8 +36,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 )
 

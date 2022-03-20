@@ -37,9 +37,9 @@ import (
 	"strconv"
 	"unicode"
 
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 )
 
@@ -103,7 +103,7 @@ func New() *Parser {
 		ast.NewParamMarkerExpr == nil ||
 		ast.NewHexLiteral == nil ||
 		ast.NewBitLiteral == nil {
-		panic("no parser driver (forgotten import?) https://github.com/dubbogo/parser/issues/43")
+		panic("no parser driver (forgotten import?) https://github.com/arana-db/parser/issues/43")
 	}
 
 	return &Parser{

@@ -40,13 +40,13 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/sessionctx/stmtctx"
-	"github.com/dubbogo/parser/terror"
-	"github.com/dubbogo/parser/tidb-types/json"
-	"github.com/dubbogo/parser/types"
-	"github.com/dubbogo/parser/util/hack"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/sessionctx/stmtctx"
+	"github.com/arana-db/parser/terror"
+	"github.com/arana-db/parser/tidb-types/json"
+	"github.com/arana-db/parser/types"
+	"github.com/arana-db/parser/util/hack"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -1271,8 +1271,8 @@ func ProduceDecWithSpecifiedTp(dec *MyDecimal, tp *FieldType, sc *stmtctx.Statem
 			}
 			if !dec.IsZero() && frac > decimal && dec.Compare(&old) != 0 {
 				if sc.InInsertStmt || sc.InUpdateStmt || sc.InDeleteStmt {
-					// fix https://github.com/dubbogo/parser/issues/3895
-					// fix https://github.com/dubbogo/parser/issues/5532
+					// fix https://github.com/arana-db/parser/issues/3895
+					// fix https://github.com/arana-db/parser/issues/5532
 					sc.AppendWarning(ErrTruncatedWrongVal.GenWithStackByArgs("DECIMAL", &old))
 					err = nil
 				} else {

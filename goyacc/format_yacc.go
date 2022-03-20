@@ -42,7 +42,7 @@ import (
 
 	parser "github.com/cznic/parser/yacc"
 	"github.com/cznic/strutil"
-	"github.com/dubbogo/parser/format"
+	"github.com/arana-db/parser/format"
 	"github.com/pingcap/errors"
 )
 

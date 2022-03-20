@@ -28,13 +28,13 @@ package parser
 import (
 	"strings"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/opcode"
-	"github.com/dubbogo/parser/auth"
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/opcode"
+	"github.com/arana-db/parser/auth"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/types"
 )
 
 %}

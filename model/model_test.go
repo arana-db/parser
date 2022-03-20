@@ -36,8 +36,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/types"
 	. "github.com/pingcap/check"
 )
 

@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dubbogo/parser/format"
+	"github.com/arana-db/parser/format"
 	"github.com/pingcap/errors"
 )
 

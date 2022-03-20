@@ -31,12 +31,12 @@
 package ast
 
 import (
-	"github.com/dubbogo/parser/auth"
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/model"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
-	"github.com/dubbogo/parser/types"
+	"github.com/arana-db/parser/auth"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/model"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
+	"github.com/arana-db/parser/types"
 	"github.com/pingcap/errors"
 )
 

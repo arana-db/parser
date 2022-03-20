@@ -31,7 +31,7 @@
 package ast_test
 
 import (
-	. "github.com/dubbogo/parser/ast"
+	. "github.com/arana-db/parser/ast"
 	. "github.com/pingcap/check"
 )
 

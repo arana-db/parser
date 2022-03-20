@@ -33,7 +33,7 @@ package metrics
 import (
 	"testing"
 
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/terror"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 )

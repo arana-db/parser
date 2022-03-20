@@ -37,7 +37,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/terror"
 	"github.com/pingcap/errors"
 )
 

@@ -35,9 +35,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/mysql"
-	"github.com/dubbogo/parser/terror"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/terror"
 )
 
 var (

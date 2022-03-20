@@ -34,8 +34,8 @@ import (
 	"strconv"
 
 	"github.com/pingcap/errors"
-	"github.com/dubbogo/parser/util/collate"
-	"github.com/dubbogo/parser/util/stringutil"
+	"github.com/arana-db/parser/util/collate"
+	"github.com/arana-db/parser/util/stringutil"
 )
 
 // Enum is for MySQL enum type.

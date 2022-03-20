@@ -35,9 +35,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/dubbogo/parser/charset"
-	"github.com/dubbogo/parser/format"
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser/charset"
+	"github.com/arana-db/parser/format"
+	"github.com/arana-db/parser/mysql"
 )
 
 // UnspecifiedLength is unspecified length.

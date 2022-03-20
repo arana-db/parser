@@ -38,8 +38,8 @@ import (
 	"sort"
 	"unicode/utf8"
 
-	"github.com/dubbogo/parser/util/hack"
-	"github.com/dubbogo/parser/util/stringutil"
+	"github.com/arana-db/parser/util/hack"
+	"github.com/arana-db/parser/util/stringutil"
 	"github.com/pingcap/errors"
 )
 

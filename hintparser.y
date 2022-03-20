@@ -18,8 +18,8 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/dubbogo/parser/ast"
-	"github.com/dubbogo/parser/model"
+	"github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/model"
 )
 
 %}

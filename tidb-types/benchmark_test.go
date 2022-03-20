@@ -34,7 +34,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser/mysql"
 )
 
 func BenchmarkDefaultTypeForValue(b *testing.B) {

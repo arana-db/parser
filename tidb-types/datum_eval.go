@@ -32,7 +32,7 @@ package types
 
 import (
 	"github.com/cznic/mathutil"
-	"github.com/dubbogo/parser/opcode"
+	"github.com/arana-db/parser/opcode"
 	"github.com/pingcap/errors"
 )
 

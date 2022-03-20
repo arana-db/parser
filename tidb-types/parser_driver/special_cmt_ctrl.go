@@ -34,7 +34,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/dubbogo/parser"
+	"github.com/arana-db/parser"
 )
 
 // To add new features that needs to be downgrade-compatible,

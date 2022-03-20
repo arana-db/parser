@@ -10,13 +10,13 @@ This package contains github.com/pingcap/parser and github.com/pingcap/tidb
 parser:
 ```go
 import (
-    "github.com/dubbogo/parser"
+    "github.com/arana-db/parser"
 )
 ```
 
 tidb:
 ```go
 import (
-    "github.com/dubbogo/parser/tidb-types/parser_driver"
+    "github.com/arana-db/parser/tidb-types/parser_driver"
 )
 ```

@@ -21,8 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/dubbogo/parser"
-	"github.com/dubbogo/parser/ast"
+	"github.com/arana-db/parser"
+	"github.com/arana-db/parser/ast"
 	. "github.com/pingcap/check"
 )
 

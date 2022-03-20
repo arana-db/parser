@@ -38,7 +38,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/dubbogo/parser/mysql"
+	"github.com/arana-db/parser/mysql"
 )
 
 var _ = yyLexer(&Scanner{})
