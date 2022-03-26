@@ -848,34 +848,6 @@ var hintTokenMap = map[string]int{
 	"RESOURCE_GROUP":        hintResourceGroup,
 	"QB_NAME":               hintQBName,
 
-	// TiDB hint names
-	"AGG_TO_COP":              hintAggToCop,
-	"IGNORE_PLAN_CACHE":       hintIgnorePlanCache,
-	"HASH_AGG":                hintHashAgg,
-	"IGNORE_INDEX":            hintIgnoreIndex,
-	"INL_HASH_JOIN":           hintInlHashJoin,
-	"INL_JOIN":                hintInlJoin,
-	"INL_MERGE_JOIN":          hintInlMergeJoin,
-	"MEMORY_QUOTA":            hintMemoryQuota,
-	"NO_SWAP_JOIN_INPUTS":     hintNoSwapJoinInputs,
-	"QUERY_TYPE":              hintQueryType,
-	"READ_CONSISTENT_REPLICA": hintReadConsistentReplica,
-	"READ_FROM_STORAGE":       hintReadFromStorage,
-	"MERGE_JOIN":              hintSMJoin,
-	"STREAM_AGG":              hintStreamAgg,
-	"SWAP_JOIN_INPUTS":        hintSwapJoinInputs,
-	"USE_INDEX_MERGE":         hintUseIndexMerge,
-	"USE_INDEX":               hintUseIndex,
-	"USE_PLAN_CACHE":          hintUsePlanCache,
-	"USE_TOJA":                hintUseToja,
-	"TIME_RANGE":              hintTimeRange,
-	"USE_CASCADES":            hintUseCascades,
-
-	// TiDB hint aliases
-	"TIDB_HJ":   hintHashJoin,
-	"TIDB_INLJ": hintInlJoin,
-	"TIDB_SMJ":  hintSMJoin,
-
 	// Other keywords
 	"OLAP":            hintOLAP,
 	"OLTP":            hintOLTP,
