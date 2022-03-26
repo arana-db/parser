@@ -255,3 +255,8 @@ func (o Op) Restore(ctx *format.RestoreCtx) error {
 	}
 	return nil
 }
+
+// Literal returns literal string.
+func (o Op) Literal() string {
+	return ops[o].literal
+}
