@@ -34,8 +34,9 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/arana-db/parser/mysql"
 	. "github.com/pingcap/check"
+
+	"github.com/arana-db/parser/mysql"
 )
 
 var _ = Suite(&testLexerSuite{})
@@ -218,7 +219,7 @@ func (s *testLexerSuite) TestscanString(c *C) {
 		{`' \n\tTest String'`, " \n\tTest String"},
 		{`'\x\B'`, "xB"},
 		{`'\0\'\"\b\n\r\t\\'`, "\000'\"\b\n\r\t\\"},
-		{`'\Z'`, string(26)},
+		{`'\Z'`, string(rune(26))},
 		{`'\%\_'`, `\%\_`},
 		{`'hello'`, "hello"},
 		{`'"hello"'`, `"hello"`},

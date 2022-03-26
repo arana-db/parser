@@ -53,6 +53,9 @@ type hintScanner struct {
 	Scanner
 }
 
+func (hs *hintScanner) Error(s string) {
+}
+
 func (hs *hintScanner) Errorf(format string, args ...interface{}) error {
 	inner := hs.Scanner.Errorf(format, args...)
 	return ErrWarnOptimizerHintParseError.GenWithStackByArgs(inner)

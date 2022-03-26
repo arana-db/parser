@@ -31,13 +31,14 @@
 package ast
 
 import (
+	"github.com/pingcap/errors"
+
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/terror"
 	"github.com/arana-db/parser/types"
-	"github.com/pingcap/errors"
 )
 
 var (
@@ -1083,7 +1084,7 @@ func (n *DropTableStmt) Restore(ctx *format.RestoreCtx) error {
 			ctx.WritePlain(", ")
 		}
 		if err := table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore DropTableStmt.Tables "+string(index))
+			return errors.Annotate(err, "An error occurred while restore DropTableStmt.Tables "+string(rune(index)))
 		}
 	}
 
