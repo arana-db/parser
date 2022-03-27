@@ -244,3 +244,9 @@ func (o Op) Restore(ctx *format.RestoreCtx) error {
 	}
 	return nil
 }
+
+// Literal returns the literal string.
+func (o Op) Literal() string {
+	info := &ops[o]
+	return info.literal
+}
