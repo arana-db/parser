@@ -1,20 +1,3 @@
-// Licensed to Apache Software Foundation (ASF) under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Apache Software Foundation (ASF) licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-//
 // Copyright 2016 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,25 +14,23 @@
 package ast_test
 
 import (
+	"fmt"
+	"testing"
+
 	"github.com/arana-db/parser"
-	. "github.com/arana-db/parser/ast"
+	"github.com/arana-db/parser/ast"
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/mysql"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = Suite(&testMiscSuite{})
-
-type testMiscSuite struct {
-}
 
 type visitor struct{}
 
-func (v visitor) Enter(in Node) (Node, bool) {
+func (v visitor) Enter(in ast.Node) (ast.Node, bool) {
 	return in, false
 }
 
-func (v visitor) Leave(in Node) (Node, bool) {
+func (v visitor) Leave(in ast.Node) (ast.Node, bool) {
 	return in, true
 }
 
@@ -57,44 +38,44 @@ type visitor1 struct {
 	visitor
 }
 
-func (visitor1) Enter(in Node) (Node, bool) {
+func (visitor1) Enter(in ast.Node) (ast.Node, bool) {
 	return in, true
 }
 
-func (ts *testMiscSuite) TestMiscVisitorCover(c *C) {
-	valueExpr := NewValueExpr(42, mysql.DefaultCharset, mysql.DefaultCollationName)
-	stmts := []Node{
-		&AdminStmt{},
-		&AlterUserStmt{},
-		&BeginStmt{},
-		&BinlogStmt{},
-		&CommitStmt{},
-		&CreateUserStmt{},
-		&DeallocateStmt{},
-		&DoStmt{},
-		&ExecuteStmt{UsingVars: []ExprNode{valueExpr}},
-		&ExplainStmt{Stmt: &ShowStmt{}},
-		&GrantStmt{},
-		&PrepareStmt{SQLVar: &VariableExpr{Value: valueExpr}},
-		&RollbackStmt{},
-		&SetPwdStmt{},
-		&SetStmt{Variables: []*VariableAssignment{
+func TestMiscVisitorCover(t *testing.T) {
+	valueExpr := ast.NewValueExpr(42, mysql.DefaultCharset, mysql.DefaultCollationName)
+	stmts := []ast.Node{
+		&ast.AdminStmt{},
+		&ast.AlterUserStmt{},
+		&ast.BeginStmt{},
+		&ast.BinlogStmt{},
+		&ast.CommitStmt{},
+		&ast.CreateUserStmt{},
+		&ast.DeallocateStmt{},
+		&ast.DoStmt{},
+		&ast.ExecuteStmt{UsingVars: []ast.ExprNode{valueExpr}},
+		&ast.ExplainStmt{Stmt: &ast.ShowStmt{}},
+		&ast.GrantStmt{},
+		&ast.PrepareStmt{SQLVar: &ast.VariableExpr{Value: valueExpr}},
+		&ast.RollbackStmt{},
+		&ast.SetPwdStmt{},
+		&ast.SetStmt{Variables: []*ast.VariableAssignment{
 			{
 				Value: valueExpr,
 			},
 		}},
-		&UseStmt{},
-		&AnalyzeTableStmt{
-			TableNames: []*TableName{
+		&ast.UseStmt{},
+		&ast.AnalyzeTableStmt{
+			TableNames: []*ast.TableName{
 				{},
 			},
 		},
-		&FlushStmt{},
-		&PrivElem{},
-		&VariableAssignment{Value: valueExpr},
-		&KillStmt{},
-		&DropStatsStmt{Table: &TableName{}},
-		&ShutdownStmt{},
+		&ast.FlushStmt{},
+		&ast.PrivElem{},
+		&ast.VariableAssignment{Value: valueExpr},
+		&ast.KillStmt{},
+		&ast.DropStatsStmt{Table: &ast.TableName{}},
+		&ast.ShutdownStmt{},
 	}
 
 	for _, v := range stmts {
@@ -103,7 +84,7 @@ func (ts *testMiscSuite) TestMiscVisitorCover(c *C) {
 	}
 }
 
-func (ts *testMiscSuite) TestDDLVisitorCover(c *C) {
+func TestDDLVisitorCoverMisc(t *testing.T) {
 	sql := `
 create table t (c1 smallint unsigned, c2 int unsigned);
 alter table t add column a smallint unsigned after b;
@@ -121,14 +102,14 @@ constraint foreign key (jobabbr) references ffxi_jobtype (jobabbr) on delete cas
 `
 	parse := parser.New()
 	stmts, _, err := parse.Parse(sql, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	for _, stmt := range stmts {
 		stmt.Accept(visitor{})
 		stmt.Accept(visitor1{})
 	}
 }
 
-func (ts *testMiscSuite) TestDMLVistorCover(c *C) {
+func TestDMLVistorCover(t *testing.T) {
 	sql := `delete from somelog where user = 'jcole' order by timestamp_column limit 1;
 delete t1, t2 from t1 inner join t2 inner join t3 where t1.id=t2.id and t2.id=t3.id;
 select * from t where exists(select * from t k where t.c = k.c having sum(c) = 1);
@@ -140,7 +121,7 @@ load data infile '/tmp/t.csv' into table t fields terminated by 'ab' enclosed by
 
 	p := parser.New()
 	stmts, _, err := p.Parse(sql, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	for _, stmt := range stmts {
 		stmt.Accept(visitor{})
 		stmt.Accept(visitor1{})
@@ -148,92 +129,100 @@ load data infile '/tmp/t.csv' into table t fields terminated by 'ab' enclosed by
 }
 
 // test Change Pump or drainer status sql parser
-func (ts *testMiscSuite) TestChangeStmt(c *C) {
+func TestChangeStmt(t *testing.T) {
 	sql := `change pump to node_state='paused' for node_id '127.0.0.1:8249';
 change drainer to node_state='paused' for node_id '127.0.0.1:8249';
 shutdown;`
 
 	p := parser.New()
 	stmts, _, err := p.Parse(sql, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	for _, stmt := range stmts {
 		stmt.Accept(visitor{})
 		stmt.Accept(visitor1{})
 	}
 }
 
-func (ts *testMiscSuite) TestSensitiveStatement(c *C) {
-	positive := []StmtNode{
-		&SetPwdStmt{},
-		&CreateUserStmt{},
-		&AlterUserStmt{},
-		&GrantStmt{},
+func TestSensitiveStatement(t *testing.T) {
+	positive := []ast.StmtNode{
+		&ast.SetPwdStmt{},
+		&ast.CreateUserStmt{},
+		&ast.AlterUserStmt{},
+		&ast.GrantStmt{},
 	}
 	for i, stmt := range positive {
-		_, ok := stmt.(SensitiveStmtNode)
-		c.Assert(ok, IsTrue, Commentf("%d, %#v fail", i, stmt))
+		_, ok := stmt.(ast.SensitiveStmtNode)
+		require.Truef(t, ok, "%d, %#v fail", i, stmt)
 	}
 
-	negative := []StmtNode{
-		&DropUserStmt{},
-		&RevokeStmt{},
-		&AlterTableStmt{},
-		&CreateDatabaseStmt{},
-		&CreateIndexStmt{},
-		&CreateTableStmt{},
-		&DropDatabaseStmt{},
-		&DropIndexStmt{},
-		&DropTableStmt{},
-		&RenameTableStmt{},
-		&TruncateTableStmt{},
+	negative := []ast.StmtNode{
+		&ast.DropUserStmt{},
+		&ast.RevokeStmt{},
+		&ast.AlterTableStmt{},
+		&ast.CreateDatabaseStmt{},
+		&ast.CreateIndexStmt{},
+		&ast.CreateTableStmt{},
+		&ast.DropDatabaseStmt{},
+		&ast.DropIndexStmt{},
+		&ast.DropTableStmt{},
+		&ast.RenameTableStmt{},
+		&ast.TruncateTableStmt{},
 	}
 	for _, stmt := range negative {
-		_, ok := stmt.(SensitiveStmtNode)
-		c.Assert(ok, IsFalse)
+		_, ok := stmt.(ast.SensitiveStmtNode)
+		require.False(t, ok)
 	}
 }
 
-func (ts *testMiscSuite) TestUserSpec(c *C) {
+func TestUserSpec(t *testing.T) {
 	hashString := "*3D56A309CD04FA2EEF181462E59011F075C89548"
-	u := UserSpec{
+	u := ast.UserSpec{
 		User: &auth.UserIdentity{
 			Username: "test",
 		},
-		AuthOpt: &AuthOption{
+		AuthOpt: &ast.AuthOption{
 			ByAuthString: false,
 			AuthString:   "xxx",
 			HashString:   hashString,
 		},
 	}
 	pwd, ok := u.EncodedPassword()
-	c.Assert(ok, IsTrue)
-	c.Assert(pwd, Equals, u.AuthOpt.HashString)
+	require.True(t, ok)
+	require.Equal(t, u.AuthOpt.HashString, pwd)
 
 	u.AuthOpt.HashString = "not-good-password-format"
-	pwd, ok = u.EncodedPassword()
-	c.Assert(ok, IsFalse)
+	_, ok = u.EncodedPassword()
+	require.False(t, ok)
 
 	u.AuthOpt.ByAuthString = true
 	pwd, ok = u.EncodedPassword()
-	c.Assert(ok, IsTrue)
-	c.Assert(pwd, Equals, hashString)
+	require.True(t, ok)
+	require.Equal(t, hashString, pwd)
 
 	u.AuthOpt.AuthString = ""
 	pwd, ok = u.EncodedPassword()
-	c.Assert(ok, IsTrue)
-	c.Assert(pwd, Equals, "")
+	require.True(t, ok)
+	require.Equal(t, "", pwd)
 }
 
-func (ts *testMiscSuite) TestTableOptimizerHintRestore(c *C) {
+func TestTableOptimizerHintRestore(t *testing.T) {
 	testCases := []NodeRestoreTestCase{
 		{"USE_INDEX(t1 c1)", "USE_INDEX(`t1` `c1`)"},
 		{"USE_INDEX(test.t1 c1)", "USE_INDEX(`test`.`t1` `c1`)"},
 		{"USE_INDEX(@sel_1 t1 c1)", "USE_INDEX(@`sel_1` `t1` `c1`)"},
 		{"USE_INDEX(t1@sel_1 c1)", "USE_INDEX(`t1`@`sel_1` `c1`)"},
 		{"USE_INDEX(test.t1@sel_1 c1)", "USE_INDEX(`test`.`t1`@`sel_1` `c1`)"},
+		{"USE_INDEX(test.t1@sel_1 partition(p0) c1)", "USE_INDEX(`test`.`t1`@`sel_1` PARTITION(`p0`) `c1`)"},
+		{"FORCE_INDEX(t1 c1)", "FORCE_INDEX(`t1` `c1`)"},
+		{"FORCE_INDEX(test.t1 c1)", "FORCE_INDEX(`test`.`t1` `c1`)"},
+		{"FORCE_INDEX(@sel_1 t1 c1)", "FORCE_INDEX(@`sel_1` `t1` `c1`)"},
+		{"FORCE_INDEX(t1@sel_1 c1)", "FORCE_INDEX(`t1`@`sel_1` `c1`)"},
+		{"FORCE_INDEX(test.t1@sel_1 c1)", "FORCE_INDEX(`test`.`t1`@`sel_1` `c1`)"},
+		{"FORCE_INDEX(test.t1@sel_1 partition(p0) c1)", "FORCE_INDEX(`test`.`t1`@`sel_1` PARTITION(`p0`) `c1`)"},
 		{"IGNORE_INDEX(t1 c1)", "IGNORE_INDEX(`t1` `c1`)"},
 		{"IGNORE_INDEX(@sel_1 t1 c1)", "IGNORE_INDEX(@`sel_1` `t1` `c1`)"},
 		{"IGNORE_INDEX(t1@sel_1 c1)", "IGNORE_INDEX(`t1`@`sel_1` `c1`)"},
+		{"IGNORE_INDEX(t1@sel_1 partition(p0, p1) c1)", "IGNORE_INDEX(`t1`@`sel_1` PARTITION(`p0`, `p1`) `c1`)"},
 		{"TIDB_SMJ(`t1`)", "TIDB_SMJ(`t1`)"},
 		{"TIDB_SMJ(t1)", "TIDB_SMJ(`t1`)"},
 		{"TIDB_SMJ(t1,t2)", "TIDB_SMJ(`t1`, `t2`)"},
@@ -246,6 +235,9 @@ func (ts *testMiscSuite) TestTableOptimizerHintRestore(c *C) {
 		{"TIDB_HJ(@sel1 t1,t2)", "TIDB_HJ(@`sel1` `t1`, `t2`)"},
 		{"TIDB_HJ(t1@sel1,t2@sel2)", "TIDB_HJ(`t1`@`sel1`, `t2`@`sel2`)"},
 		{"MERGE_JOIN(t1,t2)", "MERGE_JOIN(`t1`, `t2`)"},
+		{"BROADCAST_JOIN(t1,t2)", "BROADCAST_JOIN(`t1`, `t2`)"},
+		{"INL_HASH_JOIN(t1,t2)", "INL_HASH_JOIN(`t1`, `t2`)"},
+		{"INL_MERGE_JOIN(t1,t2)", "INL_MERGE_JOIN(`t1`, `t2`)"},
 		{"INL_JOIN(t1,t2)", "INL_JOIN(`t1`, `t2`)"},
 		{"HASH_JOIN(t1,t2)", "HASH_JOIN(`t1`, `t2`)"},
 		{"MAX_EXECUTION_TIME(3000)", "MAX_EXECUTION_TIME(3000)"},
@@ -262,6 +254,8 @@ func (ts *testMiscSuite) TestTableOptimizerHintRestore(c *C) {
 		{"QUERY_TYPE(OLAP)", "QUERY_TYPE(OLAP)"},
 		{"QUERY_TYPE(OLTP)", "QUERY_TYPE(OLTP)"},
 		{"QUERY_TYPE(@sel1 OLTP)", "QUERY_TYPE(@`sel1` OLTP)"},
+		{"NTH_PLAN(10)", "NTH_PLAN(10)"},
+		{"NTH_PLAN(@sel1 30)", "NTH_PLAN(@`sel1` 30)"},
 		{"MEMORY_QUOTA(1 GB)", "MEMORY_QUOTA(1024 MB)"},
 		{"MEMORY_QUOTA(@sel1 1 GB)", "MEMORY_QUOTA(@`sel1` 1024 MB)"},
 		{"HASH_AGG()", "HASH_AGG()"},
@@ -270,27 +264,67 @@ func (ts *testMiscSuite) TestTableOptimizerHintRestore(c *C) {
 		{"STREAM_AGG(@sel1)", "STREAM_AGG(@`sel1`)"},
 		{"AGG_TO_COP()", "AGG_TO_COP()"},
 		{"AGG_TO_COP(@sel_1)", "AGG_TO_COP(@`sel_1`)"},
+		{"LIMIT_TO_COP()", "LIMIT_TO_COP()"},
 		{"NO_INDEX_MERGE()", "NO_INDEX_MERGE()"},
 		{"NO_INDEX_MERGE(@sel1)", "NO_INDEX_MERGE(@`sel1`)"},
 		{"READ_CONSISTENT_REPLICA()", "READ_CONSISTENT_REPLICA()"},
 		{"READ_CONSISTENT_REPLICA(@sel1)", "READ_CONSISTENT_REPLICA(@`sel1`)"},
 		{"QB_NAME(sel1)", "QB_NAME(`sel1`)"},
 		{"READ_FROM_STORAGE(@sel TIFLASH[t1, t2])", "READ_FROM_STORAGE(@`sel` TIFLASH[`t1`, `t2`])"},
+		{"READ_FROM_STORAGE(@sel TIFLASH[t1 partition(p0)])", "READ_FROM_STORAGE(@`sel` TIFLASH[`t1` PARTITION(`p0`)])"},
 		{"TIME_RANGE('2020-02-02 10:10:10','2020-02-02 11:10:10')", "TIME_RANGE('2020-02-02 10:10:10', '2020-02-02 11:10:10')"},
 	}
-	extractNodeFunc := func(node Node) Node {
-		return node.(*SelectStmt).TableHints[0]
+	extractNodeFunc := func(node ast.Node) ast.Node {
+		return node.(*ast.SelectStmt).TableHints[0]
 	}
-	RunNodeRestoreTest(c, testCases, "select /*+ %s */ * from t1 join t2", extractNodeFunc)
+	runNodeRestoreTest(t, testCases, "select /*+ %s */ * from t1 join t2", extractNodeFunc)
 }
 
-func (ts *testMiscSuite) TestChangeStmtRestore(c *C) {
+func TestChangeStmtRestore(t *testing.T) {
 	testCases := []NodeRestoreTestCase{
 		{"CHANGE PUMP TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:9090'", "CHANGE PUMP TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:9090'"},
 		{"CHANGE DRAINER TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:9090'", "CHANGE DRAINER TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:9090'"},
 	}
-	extractNodeFunc := func(node Node) Node {
-		return node.(*ChangeStmt)
+	extractNodeFunc := func(node ast.Node) ast.Node {
+		return node.(*ast.ChangeStmt)
 	}
-	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+	runNodeRestoreTest(t, testCases, "%s", extractNodeFunc)
+}
+
+func TestBRIESecureText(t *testing.T) {
+	testCases := []struct {
+		input   string
+		secured string
+	}{
+		{
+			input:   "restore database * from 'local:///tmp/br01' snapshot = 23333",
+			secured: `^\QRESTORE DATABASE * FROM 'local:///tmp/br01' SNAPSHOT = 23333\E$`,
+		},
+		{
+			input:   "backup database * to 's3://bucket/prefix?region=us-west-2'",
+			secured: `^\QBACKUP DATABASE * TO 's3://bucket/prefix?region=us-west-2'\E$`,
+		},
+		{
+			// we need to use regexp to match to avoid the random ordering since a map was used.
+			// unfortunately Go's regexp doesn't support lookahead assertion, so the test case below
+			// has false positives.
+			input:   "backup database * to 's3://bucket/prefix?access-key=abcdefghi&secret-access-key=123&force-path-style=true'",
+			secured: `^\QBACKUP DATABASE * TO 's3://bucket/prefix?\E((access-key=xxxxxx|force-path-style=true|secret-access-key=xxxxxx)(&|'$)){3}`,
+		},
+		{
+			input:   "backup database * to 'gcs://bucket/prefix?access-key=irrelevant&credentials-file=/home/user/secrets.txt'",
+			secured: `^\QBACKUP DATABASE * TO 'gcs://bucket/prefix?\E((access-key=irrelevant|credentials-file=/home/user/secrets\.txt)(&|'$)){2}`,
+		},
+	}
+
+	p := parser.New()
+	for _, tc := range testCases {
+		comment := fmt.Sprintf("input = %s", tc.input)
+		node, err := p.ParseOneStmt(tc.input, "", "")
+		require.NoError(t, err, comment)
+		n, ok := node.(ast.SensitiveStmtNode)
+		require.True(t, ok, comment)
+		require.Regexp(t, tc.secured, n.SecureText(), comment)
+
+	}
 }

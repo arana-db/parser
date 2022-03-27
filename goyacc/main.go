@@ -1,20 +1,3 @@
-// Licensed to Apache Software Foundation (ASF) under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Apache Software Foundation (ASF) licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-//
 // Copyright 2016 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -159,10 +142,10 @@ import (
 	"strings"
 
 	"github.com/cznic/mathutil"
-	parser "github.com/cznic/parser/yacc"
 	"github.com/cznic/sortutil"
 	"github.com/cznic/strutil"
-	"github.com/cznic/y"
+	parser "modernc.org/parser/yacc"
+	"modernc.org/y"
 )
 
 var (
@@ -341,7 +324,7 @@ func main1(in string) (err error) {
 	}
 
 	if fn := *oXErrorsGen; fn != "" {
-		f, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE, 0666)
+		f, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
 			return err
 		}
@@ -545,6 +528,7 @@ type %[1]sLexer interface {
 	Lex(lval *%[1]sSymType) int
 	Errorf(format string, a ...interface{}) error
 	AppendError(err error)
+	AppendWarn(err error)
 	Errors() (warns []error, errs []error)
 }
 
@@ -805,6 +789,10 @@ yynewstate:
 		mustFormat(f, "\n")
 	}
 	mustFormat(f, `%u
+	}
+
+	if !parser.lexer.skipPositionRecording {
+		%[1]sSetOffset(parser.yyVAL, parser.yyVAL.offset)
 	}
 
 	if yyEx != nil && yyEx.Reduced(r, exState, parser.yyVAL) {
