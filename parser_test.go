@@ -1,20 +1,3 @@
-// Licensed to Apache Software Foundation (ASF) under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Apache Software Foundation (ASF) licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-//
 // Copyright 2015 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,46 +20,36 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/arana-db/parser"
 	"github.com/arana-db/parser/ast"
 	"github.com/arana-db/parser/charset"
 	. "github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
 	"github.com/arana-db/parser/mysql"
+	"github.com/arana-db/parser/opcode"
 	"github.com/arana-db/parser/terror"
 	"github.com/arana-db/parser/test_driver"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
 )
 
-func TestT(t *testing.T) {
-	CustomVerboseFlag = true
-	TestingT(t)
-}
-
-var _ = Suite(&testParserSuite{})
-
-type testParserSuite struct {
-	enableWindowFunc bool
-}
-
-func (s *testParserSuite) TestSimple(c *C) {
-	parser := parser.New()
+func TestSimple(t *testing.T) {
+	p := parser.New()
 
 	reservedKws := []string{
 		"add", "all", "alter", "analyze", "and", "as", "asc", "between", "bigint",
-		"binary", "blob", "both", "by", "cascade", "case", "change", "character", "check", "collate",
+		"binary", "blob", "both", "by", "call", "cascade", "case", "change", "character", "check", "collate",
 		"column", "constraint", "convert", "create", "cross", "current_date", "current_time",
 		"current_timestamp", "current_user", "database", "databases", "day_hour", "day_microsecond",
 		"day_minute", "day_second", "decimal", "default", "delete", "desc", "describe",
 		"distinct", "distinctRow", "div", "double", "drop", "dual", "else", "enclosed", "escaped",
-		"exists", "explain", "false", "float", "for", "force", "foreign", "from",
+		"exists", "explain", "false", "float", "fetch", "for", "force", "foreign", "from",
 		"fulltext", "grant", "group", "having", "hour_microsecond", "hour_minute",
 		"hour_second", "if", "ignore", "in", "index", "infile", "inner", "insert", "int", "into", "integer",
 		"interval", "is", "join", "key", "keys", "kill", "leading", "left", "like", "limit", "lines", "load",
 		"localtime", "localtimestamp", "lock", "longblob", "longtext", "mediumblob", "maxvalue", "mediumint", "mediumtext",
 		"minute_microsecond", "minute_second", "mod", "not", "no_write_to_binlog", "null", "numeric",
-		"on", "option", "optionally", "or", "order", "outer", "partition", "precision", "primary", "procedure", "range", "read", "real",
+		"on", "option", "optionally", "or", "order", "outer", "partition", "precision", "primary", "procedure", "range", "read", "real", "recursive",
 		"references", "regexp", "rename", "repeat", "replace", "revoke", "restrict", "right", "rlike",
 		"schema", "schemas", "second_microsecond", "select", "set", "show", "smallint",
 		"starting", "table", "terminated", "then", "tinyblob", "tinyint", "tinytext", "to",
@@ -87,22 +60,23 @@ func (s *testParserSuite) TestSimple(c *C) {
 		"delayed", "high_priority", "low_priority",
 		"cumeDist", "denseRank", "firstValue", "lag", "lastValue", "lead", "nthValue", "ntile",
 		"over", "percentRank", "rank", "row", "rows", "rowNumber", "window", "linear",
-		"match", "until",
+		"match", "until", "placement", "tablesample", "attributes",
 		// TODO: support the following keywords
 		// "with",
 	}
 	for _, kw := range reservedKws {
 		src := fmt.Sprintf("SELECT * FROM db.%s;", kw)
-		_, err := parser.ParseOneStmt(src, "", "")
-		c.Assert(err, IsNil, Commentf("source %s", src))
+		_, err := p.ParseOneStmt(src, "", "")
+
+		require.NoErrorf(t, err, "source %s", src)
 
 		src = fmt.Sprintf("SELECT * FROM %s.desc", kw)
-		_, err = parser.ParseOneStmt(src, "", "")
-		c.Assert(err, IsNil, Commentf("source %s", src))
+		_, err = p.ParseOneStmt(src, "", "")
+		require.NoErrorf(t, err, "source %s", src)
 
 		src = fmt.Sprintf("SELECT t.%s FROM t", kw)
-		_, err = parser.ParseOneStmt(src, "", "")
-		c.Assert(err, IsNil, Commentf("source %s", src))
+		_, err = p.ParseOneStmt(src, "", "")
+		require.NoErrorf(t, err, "source %s", src)
 	}
 
 	// Testcase for unreserved keywords
@@ -110,69 +84,70 @@ func (s *testParserSuite) TestSimple(c *C) {
 		"auto_increment", "after", "begin", "bit", "bool", "boolean", "charset", "columns", "commit",
 		"date", "datediff", "datetime", "deallocate", "do", "from_days", "end", "engine", "engines", "execute", "extended", "first", "file", "full",
 		"local", "names", "offset", "password", "prepare", "quick", "rollback", "session", "signed",
-		"start", "global", "tables", "tablespace", "text", "time", "timestamp", "tidb", "transaction", "truncate", "unknown",
+		"start", "global", "tables", "tablespace", "target", "text", "time", "timestamp", "tidb", "transaction", "truncate", "unknown",
 		"value", "warnings", "year", "now", "substr", "subpartition", "subpartitions", "substring", "mode", "any", "some", "user", "identified",
 		"collation", "comment", "avg_row_length", "checksum", "compression", "connection", "key_block_size",
 		"max_rows", "min_rows", "national", "quarter", "escape", "grants", "status", "fields", "triggers", "language",
 		"delay_key_write", "isolation", "partitions", "repeatable", "committed", "uncommitted", "only", "serializable", "level",
 		"curtime", "variables", "dayname", "version", "btree", "hash", "row_format", "dynamic", "fixed", "compressed",
-		"compact", "redundant", "sql_no_cache sql_no_cache", "sql_cache sql_cache", "action", "round",
+		"compact", "redundant", "1 sql_no_cache", "1 sql_cache", "action", "round",
 		"enable", "disable", "reverse", "space", "privileges", "get_lock", "release_lock", "sleep", "no", "greatest", "least",
 		"binlog", "hex", "unhex", "function", "indexes", "from_unixtime", "processlist", "events", "less", "than", "timediff",
-		"ln", "log", "log2", "log10", "timestampdiff", "pi", "quote", "none", "super", "shared", "exclusive",
+		"ln", "log", "log2", "log10", "timestampdiff", "pi", "proxy", "quote", "none", "super", "shared", "exclusive",
 		"always", "stats", "stats_meta", "stats_histogram", "stats_buckets", "stats_healthy", "tidb_version", "replication", "slave", "client",
 		"max_connections_per_hour", "max_queries_per_hour", "max_updates_per_hour", "max_user_connections", "event", "reload", "routine", "temporary",
 		"following", "preceding", "unbounded", "respect", "nulls", "current", "last", "against", "expansion",
-		"chain", "error", "general", "nvarchar", "pack_keys", "parser", "shard_row_id_bits", "pre_split_regions",
+		"chain", "error", "general", "nvarchar", "pack_keys", "p", "shard_row_id_bits", "pre_split_regions",
+		"constraints", "role", "replicas", "policy", "s3", "strict", "running", "stop", "preserve", "placement",
 	}
 	for _, kw := range unreservedKws {
 		src := fmt.Sprintf("SELECT %s FROM tbl;", kw)
-		_, err := parser.ParseOneStmt(src, "", "")
-		c.Assert(err, IsNil, Commentf("source %s", src))
+		_, err := p.ParseOneStmt(src, "", "")
+		require.NoErrorf(t, err, "source %s", src)
 	}
 
 	// Testcase for prepared statement
 	src := "SELECT id+?, id+? from t;"
-	_, err := parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err := p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// Testcase for -- Comment and unary -- operator
 	src = "CREATE TABLE foo (a SMALLINT UNSIGNED, b INT UNSIGNED); -- foo\nSelect --1 from foo;"
-	stmts, _, err := parser.Parse(src, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(stmts, HasLen, 2)
+	stmts, _, err := p.Parse(src, "", "")
+	require.NoError(t, err)
+	require.Len(t, stmts, 2)
 
 	// Testcase for /*! xx */
 	// See http://dev.mysql.com/doc/refman/5.7/en/comments.html
-	// Fix: https://github.com/arana-db/parser/issues/971
+	// Fix: https://github.com/pingcap/tidb/issues/971
 	src = "/*!40101 SET character_set_client = utf8 */;"
-	stmts, _, err = parser.Parse(src, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(stmts, HasLen, 1)
+	stmts, _, err = p.Parse(src, "", "")
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
 	stmt := stmts[0]
 	_, ok := stmt.(*ast.SetStmt)
-	c.Assert(ok, IsTrue)
+	require.True(t, ok)
 
 	// for issue #2017
 	src = "insert into blobtable (a) values ('/*! truncated */');"
-	stmt, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	stmt, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	is, ok := stmt.(*ast.InsertStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(is.Lists, HasLen, 1)
-	c.Assert(is.Lists[0], HasLen, 1)
-	c.Assert(is.Lists[0][0].(ast.ValueExpr).GetDatumString(), Equals, "/*! truncated */")
+	require.True(t, ok)
+	require.Len(t, is.Lists, 1)
+	require.Len(t, is.Lists[0], 1)
+	require.Equal(t, "/*! truncated */", is.Lists[0][0].(ast.ValueExpr).GetDatumString())
 
 	// Testcase for CONVERT(expr,type)
 	src = "SELECT CONVERT('111', SIGNED);"
-	st, err := parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	st, err := p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	ss, ok := st.(*ast.SelectStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(len(ss.Fields.Fields), Equals, 1)
+	require.True(t, ok)
+	require.Len(t, ss.Fields.Fields, 1)
 	cv, ok := ss.Fields.Fields[0].Expr.(*ast.FuncCastExpr)
-	c.Assert(ok, IsTrue)
-	c.Assert(cv.FunctionType, Equals, ast.CastConvertFunction)
+	require.True(t, ok)
+	require.Equal(t, ast.CastConvertFunction, cv.FunctionType)
 
 	// for query start with comment
 	srcs := []string{
@@ -183,55 +158,55 @@ func (s *testParserSuite) TestSimple(c *C) {
 		"SELECT CONVERT('111', SIGNED) /*comment*/;",
 	}
 	for _, src := range srcs {
-		st, err = parser.ParseOneStmt(src, "", "")
-		c.Assert(err, IsNil)
-		ss, ok = st.(*ast.SelectStmt)
-		c.Assert(ok, IsTrue)
+		st, err = p.ParseOneStmt(src, "", "")
+		require.NoError(t, err)
+		_, ok = st.(*ast.SelectStmt)
+		require.True(t, ok)
 	}
 
 	// for issue #961
 	src = "create table t (c int key);"
-	st, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	cs, ok := st.(*ast.CreateTableStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(cs.Cols, HasLen, 1)
-	c.Assert(cs.Cols[0].Options, HasLen, 1)
-	c.Assert(cs.Cols[0].Options[0].Tp, Equals, ast.ColumnOptionPrimaryKey)
+	require.True(t, ok)
+	require.Len(t, cs.Cols, 1)
+	require.Len(t, cs.Cols[0].Options, 1)
+	require.Equal(t, ast.ColumnOptionPrimaryKey, cs.Cols[0].Options[0].Tp)
 
 	// for issue #4497
 	src = "create table t1(a NVARCHAR(100));"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// for issue 2803
 	src = "use quote;"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// issue #4354
 	src = "select b'';"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	src = "select B'';"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// src = "select 0b'';"
-	// _, err = parser.ParseOneStmt(src, "", "")
-	// c.Assert(err, NotNil)
+	// _, err = p.ParseOneStmt(src, "", "")
+	// require.Error(t, err)
 
 	// for #4909, support numericType `signed` filedOpt.
 	src = "CREATE TABLE t(_sms smallint signed, _smu smallint unsigned);"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// for #7371, support NATIONAL CHARACTER
 	// reference link: https://dev.mysql.com/doc/refman/5.7/en/charset-national.html
 	src = "CREATE TABLE t(c1 NATIONAL CHARACTER(10));"
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	src = `CREATE TABLE t(a tinyint signed,
 		b smallint signed,
@@ -248,68 +223,123 @@ func (s *testParserSuite) TestSimple(c *C) {
 		m boolean signed
 		);`
 
-	st, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	ct, ok := st.(*ast.CreateTableStmt)
-	c.Assert(ok, IsTrue)
+	require.True(t, ok)
 	for _, col := range ct.Cols {
-		c.Assert(col.Tp.Flag&mysql.UnsignedFlag, Equals, uint(0))
+		require.Equal(t, uint(0), col.Tp.Flag&mysql.UnsignedFlag)
 	}
 
 	// for issue #4006
 	src = `insert into tb(v) (select v from tb);`
-	_, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 
 	// for issue #9823
 	src = "SELECT 9223372036854775807;"
-	st, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	sel, ok := st.(*ast.SelectStmt)
-	c.Assert(ok, IsTrue)
+	require.True(t, ok)
 	expr := sel.Fields.Fields[0]
 	vExpr := expr.Expr.(*test_driver.ValueExpr)
-	c.Assert(vExpr.Kind(), Equals, test_driver.KindInt64)
+	require.Equal(t, test_driver.KindInt64, vExpr.Kind())
 	src = "SELECT 9223372036854775808;"
-	st, err = parser.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
 	sel, ok = st.(*ast.SelectStmt)
-	c.Assert(ok, IsTrue)
+	require.True(t, ok)
 	expr = sel.Fields.Fields[0]
 	vExpr = expr.Expr.(*test_driver.ValueExpr)
-	c.Assert(vExpr.Kind(), Equals, test_driver.KindUint64)
+	require.Equal(t, test_driver.KindUint64, vExpr.Kind())
+
+	src = `select 99e+r10 from t1;`
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
+	sel, ok = st.(*ast.SelectStmt)
+	require.True(t, ok)
+	bExpr, ok := sel.Fields.Fields[0].Expr.(*ast.BinaryOperationExpr)
+	require.True(t, ok)
+	require.Equal(t, opcode.Plus, bExpr.Op)
+	require.Equal(t, "99e", bExpr.L.(*ast.ColumnNameExpr).Name.Name.O)
+	require.Equal(t, "r10", bExpr.R.(*ast.ColumnNameExpr).Name.Name.O)
+
+	src = `select t./*123*/*,@c3:=0 from t order by t.c1;`
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
+	sel, ok = st.(*ast.SelectStmt)
+	require.True(t, ok)
+	require.Equal(t, "t", sel.Fields.Fields[0].WildCard.Table.O)
+	varExpr, ok := sel.Fields.Fields[1].Expr.(*ast.VariableExpr)
+	require.True(t, ok)
+	require.Equal(t, "c3", varExpr.Name)
+
+	src = `select t.1e from test.t;`
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
+	sel, ok = st.(*ast.SelectStmt)
+	require.True(t, ok)
+	colExpr, ok := sel.Fields.Fields[0].Expr.(*ast.ColumnNameExpr)
+	require.True(t, ok)
+	require.Equal(t, "t", colExpr.Name.Table.O)
+	require.Equal(t, "1e", colExpr.Name.Name.O)
+	tName := sel.From.TableRefs.Left.(*ast.TableSource).Source.(*ast.TableName)
+	require.Equal(t, "test", tName.Schema.O)
+	require.Equal(t, "t", tName.Name.O)
+
+	src = "select t. `a` > 10 from t;"
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
+	bExpr, ok = st.(*ast.SelectStmt).Fields.Fields[0].Expr.(*ast.BinaryOperationExpr)
+	require.True(t, ok)
+	require.Equal(t, opcode.GT, bExpr.Op)
+	require.Equal(t, "a", bExpr.L.(*ast.ColumnNameExpr).Name.Name.O)
+	require.Equal(t, "t", bExpr.L.(*ast.ColumnNameExpr).Name.Table.O)
+	require.Equal(t, int64(10), bExpr.R.(ast.ValueExpr).GetValue().(int64))
+
+	p.SetSQLMode(mysql.ModeANSIQuotes)
+	src = `select t."dot"=10 from t;`
+	st, err = p.ParseOneStmt(src, "", "")
+	require.NoError(t, err)
+	bExpr, ok = st.(*ast.SelectStmt).Fields.Fields[0].Expr.(*ast.BinaryOperationExpr)
+	require.True(t, ok)
+	require.Equal(t, opcode.EQ, bExpr.Op)
+	require.Equal(t, "dot", bExpr.L.(*ast.ColumnNameExpr).Name.Name.O)
+	require.Equal(t, "t", bExpr.L.(*ast.ColumnNameExpr).Name.Table.O)
+	require.Equal(t, int64(10), bExpr.R.(ast.ValueExpr).GetValue().(int64))
 }
 
-func (s *testParserSuite) TestSpecialComments(c *C) {
-	parser := parser.New()
+func TestSpecialComments(t *testing.T) {
+	p := parser.New()
 
 	// 1. Make sure /*! ... */ respects the same SQL mode.
-	_, err := parser.ParseOneStmt(`SELECT /*! '\' */;`, "", "")
-	c.Assert(err, NotNil)
+	_, err := p.ParseOneStmt(`SELECT /*! '\' */;`, "", "")
+	require.Error(t, err)
 
-	parser.SetSQLMode(mysql.ModeNoBackslashEscapes)
-	st, err := parser.ParseOneStmt(`SELECT /*! '\' */;`, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st, FitsTypeOf, &ast.SelectStmt{})
+	p.SetSQLMode(mysql.ModeNoBackslashEscapes)
+	st, err := p.ParseOneStmt(`SELECT /*! '\' */;`, "", "")
+	require.NoError(t, err)
+	require.IsType(t, &ast.SelectStmt{}, st)
 
 	// 2. Make sure multiple statements inside /*! ... */ will not crash
 	// (this is issue #330)
-	stmts, _, err := parser.Parse("/*! SET x = 1; SELECT 2 */", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(stmts, HasLen, 2)
-	c.Assert(stmts[0], FitsTypeOf, &ast.SetStmt{})
-	c.Assert(stmts[0].Text(), Equals, "/*! SET x = 1;")
-	c.Assert(stmts[1], FitsTypeOf, &ast.SelectStmt{})
-	c.Assert(stmts[1].Text(), Equals, " SELECT 2 */")
+	stmts, _, err := p.Parse("/*! SET x = 1; SELECT 2 */", "", "")
+	require.NoError(t, err)
+	require.Len(t, stmts, 2)
+	require.IsType(t, &ast.SetStmt{}, stmts[0])
+	require.Equal(t, "/*! SET x = 1;", stmts[0].Text())
+	require.IsType(t, &ast.SelectStmt{}, stmts[1])
+	require.Equal(t, " SELECT 2 */", stmts[1].Text())
 	// ^ not sure if correct approach; having multiple statements in MySQL is a syntax error.
 
 	// 3. Make sure invalid text won't cause infinite loop
 	// (this is issue #336)
-	st, err = parser.ParseOneStmt("SELECT /*+ 😅 */ SLEEP(1);", "", "")
-	c.Assert(err, IsNil)
+	st, err = p.ParseOneStmt("SELECT /*+ 😅 */ SLEEP(1);", "", "")
+	require.NoError(t, err)
 	sel, ok := st.(*ast.SelectStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(sel.TableHints, HasLen, 0)
+	require.True(t, ok)
+	require.Len(t, sel.TableHints, 0)
 }
 
 type testCase struct {
@@ -320,124 +350,121 @@ type testCase struct {
 
 type testErrMsgCase struct {
 	src string
-	ok  bool
 	err error
 }
 
-func (s *testParserSuite) RunTest(c *C, table []testCase) {
-	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
-	for _, t := range table {
-		_, _, err := parser.Parse(t.src, "", "")
-		comment := Commentf("source %v", t.src)
-		if !t.ok {
-			c.Assert(err, NotNil, comment)
+func RunTest(t *testing.T, table []testCase, enableWindowFunc bool) {
+	p := parser.New()
+	p.EnableWindowFunc(enableWindowFunc)
+	for _, tbl := range table {
+		_, _, err := p.Parse(tbl.src, "", "")
+		if !tbl.ok {
+			require.Errorf(t, err, "source %v", tbl.src)
 			continue
 		}
-		c.Assert(err, IsNil, comment)
+		require.NoErrorf(t, err, "source %v", tbl.src)
 		// restore correctness test
-		if t.ok {
-			s.RunRestoreTest(c, t.src, t.restore)
+		if tbl.ok {
+			RunRestoreTest(t, tbl.src, tbl.restore, enableWindowFunc)
 		}
 	}
 }
 
-func (s *testParserSuite) RunRestoreTest(c *C, sourceSQLs, expectSQLs string) {
+func RunRestoreTest(t *testing.T, sourceSQLs, expectSQLs string, enableWindowFunc bool) {
 	var sb strings.Builder
-	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
-	comment := Commentf("source %v", sourceSQLs)
-	stmts, _, err := parser.Parse(sourceSQLs, "", "")
-	c.Assert(err, IsNil, comment)
+	p := parser.New()
+	p.EnableWindowFunc(enableWindowFunc)
+	comment := fmt.Sprintf("source %v", sourceSQLs)
+	stmts, _, err := p.Parse(sourceSQLs, "", "")
+	require.NoErrorf(t, err, "source %v", sourceSQLs)
 	restoreSQLs := ""
 	for _, stmt := range stmts {
 		sb.Reset()
 		err = stmt.Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
-		c.Assert(err, IsNil, comment)
+		require.NoError(t, err, comment)
 		restoreSQL := sb.String()
-		comment = Commentf("source %v; restore %v", sourceSQLs, restoreSQL)
-		restoreStmt, err := parser.ParseOneStmt(restoreSQL, "", "")
-		c.Assert(err, IsNil, comment)
+		comment = fmt.Sprintf("source %v; restore %v", sourceSQLs, restoreSQL)
+		restoreStmt, err := p.ParseOneStmt(restoreSQL, "", "")
+		require.NoError(t, err, comment)
 		CleanNodeText(stmt)
 		CleanNodeText(restoreStmt)
-		c.Assert(restoreStmt, DeepEquals, stmt, comment)
+		require.Equal(t, stmt, restoreStmt, comment)
+		if restoreSQLs != "" {
+			restoreSQLs += "; "
+		}
+		restoreSQLs += restoreSQL
+
+	}
+	require.Equalf(t, expectSQLs, restoreSQLs, "restore %v; expect %v", restoreSQLs, expectSQLs)
+}
+
+func RunTestInRealAsFloatMode(t *testing.T, table []testCase, enableWindowFunc bool) {
+	p := parser.New()
+	p.EnableWindowFunc(enableWindowFunc)
+	p.SetSQLMode(mysql.ModeRealAsFloat)
+	for _, tbl := range table {
+		_, _, err := p.Parse(tbl.src, "", "")
+		comment := fmt.Sprintf("source %v", tbl.src)
+		if !tbl.ok {
+			require.Error(t, err, comment)
+			continue
+		}
+		require.NoError(t, err, comment)
+		// restore correctness test
+		if tbl.ok {
+			RunRestoreTestInRealAsFloatMode(t, tbl.src, tbl.restore, enableWindowFunc)
+		}
+	}
+}
+
+func RunRestoreTestInRealAsFloatMode(t *testing.T, sourceSQLs, expectSQLs string, enableWindowFunc bool) {
+	var sb strings.Builder
+	p := parser.New()
+	p.EnableWindowFunc(enableWindowFunc)
+	p.SetSQLMode(mysql.ModeRealAsFloat)
+	comment := fmt.Sprintf("source %v", sourceSQLs)
+	stmts, _, err := p.Parse(sourceSQLs, "", "")
+	require.NoError(t, err, comment)
+	restoreSQLs := ""
+	for _, stmt := range stmts {
+		sb.Reset()
+		err = stmt.Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
+		require.NoError(t, err, comment)
+		restoreSQL := sb.String()
+		comment = fmt.Sprintf("source %v; restore %v", sourceSQLs, restoreSQL)
+		restoreStmt, err := p.ParseOneStmt(restoreSQL, "", "")
+		require.NoError(t, err, comment)
+		CleanNodeText(stmt)
+		CleanNodeText(restoreStmt)
+		require.Equal(t, stmt, restoreStmt, comment)
 		if restoreSQLs != "" {
 			restoreSQLs += "; "
 		}
 		restoreSQLs += restoreSQL
 	}
-	comment = Commentf("restore %v; expect %v", restoreSQLs, expectSQLs)
-	c.Assert(restoreSQLs, Equals, expectSQLs, comment)
+	require.Equal(t, expectSQLs, restoreSQLs, "restore %v; expect %v", restoreSQLs, expectSQLs)
 }
 
-func (s *testParserSuite) RunTestInRealAsFloatMode(c *C, table []testCase) {
-	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
-	parser.SetSQLMode(mysql.ModeRealAsFloat)
-	for _, t := range table {
-		_, _, err := parser.Parse(t.src, "", "")
-		comment := Commentf("source %v", t.src)
-		if !t.ok {
-			c.Assert(err, NotNil, comment)
-			continue
-		}
-		c.Assert(err, IsNil, comment)
-		// restore correctness test
-		if t.ok {
-			s.RunRestoreTestInRealAsFloatMode(c, t.src, t.restore)
-		}
-	}
-}
-
-func (s *testParserSuite) RunRestoreTestInRealAsFloatMode(c *C, sourceSQLs, expectSQLs string) {
-	var sb strings.Builder
-	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
-	parser.SetSQLMode(mysql.ModeRealAsFloat)
-	comment := Commentf("source %v", sourceSQLs)
-	stmts, _, err := parser.Parse(sourceSQLs, "", "")
-	c.Assert(err, IsNil, comment)
-	restoreSQLs := ""
-	for _, stmt := range stmts {
-		sb.Reset()
-		err = stmt.Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
-		c.Assert(err, IsNil, comment)
-		restoreSQL := sb.String()
-		comment = Commentf("source %v; restore %v", sourceSQLs, restoreSQL)
-		restoreStmt, err := parser.ParseOneStmt(restoreSQL, "", "")
-		c.Assert(err, IsNil, comment)
-		CleanNodeText(stmt)
-		CleanNodeText(restoreStmt)
-		c.Assert(restoreStmt, DeepEquals, stmt, comment)
-		if restoreSQLs != "" {
-			restoreSQLs += "; "
-		}
-		restoreSQLs += restoreSQL
-	}
-	comment = Commentf("restore %v; expect %v", restoreSQLs, expectSQLs)
-	c.Assert(restoreSQLs, Equals, expectSQLs, comment)
-}
-
-func (s *testParserSuite) RunErrMsgTest(c *C, table []testErrMsgCase) {
-	parser := parser.New()
-	for _, t := range table {
-		_, _, err := parser.Parse(t.src, "", "")
-		comment := Commentf("source %v", t.src)
-		if t.err != nil {
-			c.Assert(terror.ErrorEqual(err, t.err), IsTrue, comment)
+func RunErrMsgTest(t *testing.T, table []testErrMsgCase) {
+	p := parser.New()
+	for _, tbl := range table {
+		_, _, err := p.Parse(tbl.src, "", "")
+		comment := fmt.Sprintf("source %v", tbl.src)
+		if tbl.err != nil {
+			require.True(t, terror.ErrorEqual(err, tbl.err), comment)
 		} else {
-			c.Assert(err, IsNil, comment)
+			require.NoError(t, err, comment)
 		}
 	}
 }
 
-func (s *testParserSuite) TestDMLStmt(c *C) {
+func TestDMLStmt(t *testing.T) {
 	table := []testCase{
 		{"", true, ""},
 		{";", true, ""},
 		{"INSERT INTO foo VALUES (1234)", true, "INSERT INTO `foo` VALUES (1234)"},
 		{"INSERT INTO foo VALUES (1234, 5678)", true, "INSERT INTO `foo` VALUES (1234,5678)"},
-		{"INSERT INTO t1 (SELECT * FROM t2)", true, "INSERT INTO `t1` SELECT * FROM `t2`"},
+		{"INSERT INTO t1 (SELECT * FROM t2)", true, "INSERT INTO `t1` (SELECT * FROM `t2`)"},
 		{"INSERT INTO t partition (p0) values(1234)", true, "INSERT INTO `t` PARTITION(`p0`) VALUES (1234)"},
 		{"REPLACE INTO t partition (p0) values(1234)", true, "REPLACE INTO `t` PARTITION(`p0`) VALUES (1234)"},
 		{"INSERT INTO t partition (p0, p1, p2) values(1234)", true, "INSERT INTO `t` PARTITION(`p0`, `p1`, `p2`) VALUES (1234)"},
@@ -461,7 +488,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"SELECT DISTINCTS * FROM t", false, ""},
 		{"SELECT DISTINCT * FROM t", true, "SELECT DISTINCT * FROM `t`"},
 		{"SELECT DISTINCTROW * FROM t", true, "SELECT DISTINCT * FROM `t`"},
-		{"SELECT ALL * FROM t", true, "SELECT * FROM `t`"},
+		{"SELECT ALL * FROM t", true, "SELECT ALL * FROM `t`"},
 		{"SELECT DISTINCT ALL * FROM t", false, ""},
 		{"SELECT DISTINCTROW ALL * FROM t", false, ""},
 		{"INSERT INTO foo (a) VALUES (42)", true, "INSERT INTO `foo` (`a`) VALUES (42)"},
@@ -517,6 +544,45 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 			INSERT INTO tmp SELECT * from bar;
 			SELECT * from tmp;
 		ROLLBACK;`, true, "START TRANSACTION; INSERT INTO `tmp` SELECT * FROM `bar`; SELECT * FROM `tmp`; ROLLBACK"},
+
+		// table statement
+		{"TABLE t", true, "TABLE `t`"},
+		{"(TABLE t)", true, "(TABLE `t`)"},
+		{"TABLE t1, t2", false, ""},
+		{"TABLE t ORDER BY b", true, "TABLE `t` ORDER BY `b`"},
+		{"TABLE t LIMIT 3", true, "TABLE `t` LIMIT 3"},
+		{"TABLE t ORDER BY b LIMIT 3", true, "TABLE `t` ORDER BY `b` LIMIT 3"},
+		{"TABLE t ORDER BY b LIMIT 3 OFFSET 2", true, "TABLE `t` ORDER BY `b` LIMIT 2,3"},
+		{"TABLE t ORDER BY b LIMIT 2,3", true, "TABLE `t` ORDER BY `b` LIMIT 2,3"},
+		{"INSERT INTO ta TABLE tb", true, "INSERT INTO `ta` TABLE `tb`"},
+		{"INSERT INTO t.a TABLE t.b", true, "INSERT INTO `t`.`a` TABLE `t`.`b`"},
+		{"REPLACE INTO ta TABLE tb", true, "REPLACE INTO `ta` TABLE `tb`"},
+		{"REPLACE INTO t.a TABLE t.b", true, "REPLACE INTO `t`.`a` TABLE `t`.`b`"},
+		{"TABLE t1 INTO OUTFILE 'a.txt'", true, "TABLE `t1` INTO OUTFILE 'a.txt'"},
+		{"TABLE t ORDER BY a INTO OUTFILE '/tmp/abc'", true, "TABLE `t` ORDER BY `a` INTO OUTFILE '/tmp/abc'"},
+		{"CREATE TABLE t.a TABLE t.b", true, "CREATE TABLE `t`.`a` AS TABLE `t`.`b`"},
+		{"CREATE TABLE ta TABLE tb", true, "CREATE TABLE `ta` AS TABLE `tb`"},
+		{"CREATE TABLE ta (x INT) TABLE tb", true, "CREATE TABLE `ta` (`x` INT) AS TABLE `tb`"},
+		{"CREATE VIEW v AS TABLE t", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS TABLE `t`"},
+		{"CREATE VIEW v AS (TABLE t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (TABLE `t`)"},
+		{"SELECT * FROM t1 WHERE a IN (TABLE t2)", true, "SELECT * FROM `t1` WHERE `a` IN (TABLE `t2`)"},
+
+		// values statement
+		{"VALUES ROW(1)", true, "VALUES ROW(1)"},
+		{"VALUES ROW()", true, "VALUES ROW()"},
+		{"VALUES ROW(1, default)", true, "VALUES ROW(1,DEFAULT)"},
+		{"VALUES ROW(1), ROW(2,3)", true, "VALUES ROW(1), ROW(2,3)"},
+		{"VALUES (1,2)", false, ""},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8)", true, "VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8)"},
+		{"VALUES ROW(1,s,3.1), ROW(5,y,9.9)", true, "VALUES ROW(1,`s`,3.1), ROW(5,`y`,9.9)"},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) LIMIT 3", true, "VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) LIMIT 3"},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) ORDER BY a", true, "VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) ORDER BY `a`"},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) ORDER BY a LIMIT 2", true, "VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8) ORDER BY `a` LIMIT 2"},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9) INTO OUTFILE 'a.txt'", true, "VALUES ROW(1,-2,3), ROW(5,7,9) INTO OUTFILE 'a.txt'"},
+		{"VALUES ROW(1,-2,3), ROW(5,7,9) ORDER BY a INTO OUTFILE '/tmp/abc'", true, "VALUES ROW(1,-2,3), ROW(5,7,9) ORDER BY `a` INTO OUTFILE '/tmp/abc'"},
+		{"CREATE TABLE ta VALUES ROW(1)", true, "CREATE TABLE `ta` AS VALUES ROW(1)"},
+		{"CREATE TABLE ta AS VALUES ROW(1)", true, "CREATE TABLE `ta` AS VALUES ROW(1)"},
+		{"CREATE VIEW a AS VALUES ROW(1)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `a` AS VALUES ROW(1)"},
 
 		// qualified select
 		{"SELECT a.b.c FROM t", true, "SELECT `a`.`b`.`c` FROM `t`"},
@@ -576,6 +642,8 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"load data local infile '~/1.csv' into table `t_ascii` fields terminated by B'110101101101011';", true, "LOAD DATA LOCAL INFILE '~/1.csv' IGNORE INTO TABLE `t_ascii` FIELDS TERMINATED BY 'kk'"},
 		{"load data local infile '~/1.csv' into table `t_ascii` fields terminated by B'110101101101011' enclosed by B'1101';", true, "LOAD DATA LOCAL INFILE '~/1.csv' IGNORE INTO TABLE `t_ascii` FIELDS TERMINATED BY 'kk' ENCLOSED BY '\r'"},
 		{"load data local infile '~/1.csv' into table `t_ascii` fields terminated by B'110101101101011' enclosed by B'110100001101';", false, ""},
+		{"load data local infile '~/1.csv' into table `t_ascii` lines starting by B'110101101101011' terminated by B'110101101101011';", true, "LOAD DATA LOCAL INFILE '~/1.csv' IGNORE INTO TABLE `t_ascii` LINES STARTING BY 'kk' TERMINATED BY 'kk'"},
+		{"load data local infile '~/1.csv' into table `t_ascii` lines starting by X'6B6B' terminated by X'6B6B';", true, "LOAD DATA LOCAL INFILE '~/1.csv' IGNORE INTO TABLE `t_ascii` LINES STARTING BY 'kk' TERMINATED BY 'kk'"},
 		{"load data local infile '/tmp/t.csv' into table t fields terminated by 'ab' enclosed by 'b' enclosed by 'b'", true, "LOAD DATA LOCAL INFILE '/tmp/t.csv' IGNORE INTO TABLE `t` FIELDS TERMINATED BY 'ab' ENCLOSED BY 'b'"},
 		{"load data local infile '/tmp/t.csv' into table t fields terminated by 'ab' escaped by '' enclosed by 'b'", true, "LOAD DATA LOCAL INFILE '/tmp/t.csv' IGNORE INTO TABLE `t` FIELDS TERMINATED BY 'ab' ENCLOSED BY 'b' ESCAPED BY ''"},
 		{"load data local infile '/tmp/t.csv' into table t fields terminated by 'ab' escaped by '' enclosed by 'b' SET b = CAST(CONV(MID(@var1, 3, LENGTH(@var1)-3), 2, 10) AS UNSIGNED)", true, "LOAD DATA LOCAL INFILE '/tmp/t.csv' IGNORE INTO TABLE `t` FIELDS TERMINATED BY 'ab' ENCLOSED BY 'b' ESCAPED BY '' SET `b`=CAST(CONV(MID(@`var1`, 3, LENGTH(@`var1`)-3), 2, 10) AS UNSIGNED)"},
@@ -589,10 +657,27 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"LOAD DATA LOCAL INFILE '/tmp/t.csv' IGNORE INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';", true, "LOAD DATA LOCAL INFILE '/tmp/t.csv' IGNORE INTO TABLE `t1` FIELDS TERMINATED BY ','"},
 		{"LOAD DATA LOCAL INFILE '/tmp/t.csv' REPLACE INTO TABLE t1 FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';", true, "LOAD DATA LOCAL INFILE '/tmp/t.csv' REPLACE INTO TABLE `t1` FIELDS TERMINATED BY ','"},
 
-		// select for update
-		{"SELECT * from t for update", true, "SELECT * FROM `t` FOR UPDATE"},
-		{"SELECT * from t lock in share mode", true, "SELECT * FROM `t` LOCK IN SHARE MODE"},
-		{"SELECT * from t for update nowait", true, "SELECT * FROM `t` FOR UPDATE NOWAIT"},
+		// select for update/share
+		{"select * from t for update", true, "SELECT * FROM `t` FOR UPDATE"},
+		{"select * from t for share", true, "SELECT * FROM `t` FOR SHARE"},
+		{"select * from t for update nowait", true, "SELECT * FROM `t` FOR UPDATE NOWAIT"},
+		{"select * from t for update wait 5", true, "SELECT * FROM `t` FOR UPDATE WAIT 5"},
+		{"select * from t limit 1 for update wait 11", true, "SELECT * FROM `t` LIMIT 1 FOR UPDATE WAIT 11"},
+		{"select * from t for share nowait", true, "SELECT * FROM `t` FOR SHARE NOWAIT"},
+		{"select * from t for update skip locked", true, "SELECT * FROM `t` FOR UPDATE SKIP LOCKED"},
+		{"select * from t for share skip locked", true, "SELECT * FROM `t` FOR SHARE SKIP LOCKED"},
+		{"select * from t lock in share mode", true, "SELECT * FROM `t` FOR SHARE"},
+		{"select * from t lock in share mode nowait", false, ""},
+		{"select * from t lock in share mode skip locked", false, ""},
+
+		{"select * from t for update of t", true, "SELECT * FROM `t` FOR UPDATE OF `t`"},
+		{"select * from t for share of t", true, "SELECT * FROM `t` FOR SHARE OF `t`"},
+		{"select * from t for update of t nowait", true, "SELECT * FROM `t` FOR UPDATE OF `t` NOWAIT"},
+		{"select * from t for update of t wait 5", true, "SELECT * FROM `t` FOR UPDATE OF `t` WAIT 5"},
+		{"select * from t limit 1 for update of t wait 11", true, "SELECT * FROM `t` LIMIT 1 FOR UPDATE OF `t` WAIT 11"},
+		{"select * from t for share of t nowait", true, "SELECT * FROM `t` FOR SHARE OF `t` NOWAIT"},
+		{"select * from t for update of t skip locked", true, "SELECT * FROM `t` FOR UPDATE OF `t` SKIP LOCKED"},
+		{"select * from t for share of t skip locked", true, "SELECT * FROM `t` FOR SHARE OF `t` SKIP LOCKED"},
 
 		// select into outfile
 		{"select a, b from t into outfile '/tmp/result.txt'", true, "SELECT `a`,`b` FROM `t` INTO OUTFILE '/tmp/result.txt'"},
@@ -621,6 +706,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"select * from t1 natural left outer join t2", true, "SELECT * FROM `t1` NATURAL LEFT JOIN `t2`"},
 		{"select * from t1 natural inner join t2", false, ""},
 		{"select * from t1 natural cross join t2", false, ""},
+		{"select * from t3 join t1 join t2 on t1.a=t2.a on t3.b=t2.b", true, "SELECT * FROM `t3` JOIN (`t1` JOIN `t2` ON `t1`.`a`=`t2`.`a`) ON `t3`.`b`=`t2`.`b`"},
 
 		// for straight_join
 		{"select * from t1 straight_join t2 on t1.id = t2.id", true, "SELECT * FROM `t1` STRAIGHT_JOIN `t2` ON `t1`.`id`=`t2`.`id`"},
@@ -668,7 +754,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"DELETE quick FROM t1,t2 USING t1,t2", true, "DELETE QUICK FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
 		{"DELETE low_priority ignore FROM t1,t2 USING t1,t2", true, "DELETE LOW_PRIORITY IGNORE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
 		{"DELETE low_priority quick ignore FROM t1,t2 USING t1,t2", true, "DELETE LOW_PRIORITY QUICK IGNORE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
-		{"DELETE FROM t1 USING t1 WHERE post='1'", true, "DELETE FROM `t1` USING `t1` WHERE `post`='1'"},
+		{"DELETE FROM t1 USING t1 WHERE post='1'", true, "DELETE FROM `t1` USING `t1` WHERE `post`=_UTF8MB4'1'"},
 		{"DELETE FROM t1,t2 USING t1,t2", true, "DELETE FROM `t1`,`t2` USING (`t1`) JOIN `t2`"},
 		{"DELETE FROM t1,t2,t3 USING t1,t2,t3 where t3.a = 1", true, "DELETE FROM `t1`,`t2`,`t3` USING ((`t1`) JOIN `t2`) JOIN `t3` WHERE `t3`.`a`=1"},
 		{"DELETE FROM t2,t3 USING t1,t2,t3 where t1.a = 1", true, "DELETE FROM `t2`,`t3` USING ((`t1`) JOIN `t2`) JOIN `t3` WHERE `t1`.`a`=1"},
@@ -721,6 +807,14 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"admin reload bindings", true, "ADMIN RELOAD BINDINGS"},
 		{"admin show telemetry", true, "ADMIN SHOW TELEMETRY"},
 		{"admin reset telemetry_id", true, "ADMIN RESET TELEMETRY_ID"},
+		// This case would be removed once TiDB PR to remove ADMIN RELOAD STATISTICS is merged.
+		{"admin reload statistics", true, "ADMIN RELOAD STATS_EXTENDED"},
+		{"admin reload stats_extended", true, "ADMIN RELOAD STATS_EXTENDED"},
+		// Test for 'admin flush plan_cache'
+		{"admin flush instance plan_cache", true, "ADMIN FLUSH INSTANCE PLAN_CACHE"},
+		{"admin flush session plan_cache", true, "ADMIN FLUSH SESSION PLAN_CACHE"},
+		// We do not support the global level. We will check it in the later.
+		{"admin flush global plan_cache", true, "ADMIN FLUSH GLOBAL PLAN_CACHE"},
 
 		// for on duplicate key update
 		{"INSERT INTO t (a,b,c) VALUES (1,2,3),(4,5,6) ON DUPLICATE KEY UPDATE c=VALUES(a)+VALUES(b);", true, "INSERT INTO `t` (`a`,`b`,`c`) VALUES (1,2,3),(4,5,6) ON DUPLICATE KEY UPDATE `c`=VALUES(`a`)+VALUES(`b`)"},
@@ -734,7 +828,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"UPDATE LOW_PRIORITY IGNORE t SET id = id + 1 ORDER BY id DESC;", true, "UPDATE LOW_PRIORITY IGNORE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"UPDATE t SET id = id + 1 ORDER BY id DESC;", true, "UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"UPDATE t SET id = id + 1 ORDER BY id DESC limit 3 ;", true, "UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC LIMIT 3"},
-		{"UPDATE t SET id = id + 1, name = 'jojo';", true, "UPDATE `t` SET `id`=`id`+1, `name`='jojo'"},
+		{"UPDATE t SET id = id + 1, name = 'jojo';", true, "UPDATE `t` SET `id`=`id`+1, `name`=_UTF8MB4'jojo'"},
 		{"UPDATE items,month SET items.price=month.price WHERE items.id=month.id;", true, "UPDATE (`items`) JOIN `month` SET `items`.`price`=`month`.`price` WHERE `items`.`id`=`month`.`id`"},
 		{"UPDATE user T0 LEFT OUTER JOIN user_profile T1 ON T1.id = T0.profile_id SET T0.profile_id = 1 WHERE T0.profile_id IN (1);", true, "UPDATE `user` AS `T0` LEFT JOIN `user_profile` AS `T1` ON `T1`.`id`=`T0`.`profile_id` SET `T0`.`profile_id`=1 WHERE `T0`.`profile_id` IN (1)"},
 		{"UPDATE t1, t2 set t1.profile_id = 1, t2.profile_id = 1 where ta.a=t.ba", true, "UPDATE (`t1`) JOIN `t2` SET `t1`.`profile_id`=1, `t2`.`profile_id`=1 WHERE `ta`.`a`=`t`.`ba`"},
@@ -753,19 +847,38 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// for select with where clause
 		{"SELECT * FROM t WHERE 1 = 1", true, "SELECT * FROM `t` WHERE 1=1"},
 
+		// for select with FETCH FIRST syntax
+		{"SELECT * FROM t FETCH FIRST 5 ROW ONLY", true, "SELECT * FROM `t` LIMIT 5"},
+		{"SELECT * FROM t FETCH NEXT 5 ROW ONLY", true, "SELECT * FROM `t` LIMIT 5"},
+		{"SELECT * FROM t FETCH FIRST 5 ROWS ONLY", true, "SELECT * FROM `t` LIMIT 5"},
+		{"SELECT * FROM t FETCH NEXT 5 ROWS ONLY", true, "SELECT * FROM `t` LIMIT 5"},
+		{"SELECT * FROM t FETCH FIRST ROW ONLY", true, "SELECT * FROM `t` LIMIT 1"},
+		{"SELECT * FROM t FETCH NEXT ROW ONLY", true, "SELECT * FROM `t` LIMIT 1"},
+
 		// for dual
 		{"select 1 from dual", true, "SELECT 1"},
 		{"select 1 from dual limit 1", true, "SELECT 1 LIMIT 1"},
-		{"select 1 where exists (select 2)", false, ""},
+		{"select 1 where exists (select 2)", true, "SELECT 1 FROM DUAL WHERE EXISTS (SELECT 2)"},
 		{"select 1 from dual where not exists (select 2)", true, "SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 2)"},
 		{"select 1 as a from dual order by a", true, "SELECT 1 AS `a` ORDER BY `a`"},
 		{"select 1 as a from dual where 1 < any (select 2) order by a", true, "SELECT 1 AS `a` FROM DUAL WHERE 1<ANY (SELECT 2) ORDER BY `a`"},
 		{"select 1 order by 1", true, "SELECT 1 ORDER BY 1"},
 
-		// for https://github.com/arana-db/parser/issues/320
-		{`(select 1);`, true, "SELECT 1"},
+		// for https://github.com/pingcap/tidb/issues/320
+		{`(select 1);`, true, "(SELECT 1)"},
 
-		// for https://github.com/arana-db/parser/issues/1050
+		//https://github.com/pingcap/tidb/issues/14297
+		{"select 1 where 1=1", true, "SELECT 1 FROM DUAL WHERE 1=1"},
+
+		//https://github.com/pingcap/tidb/issues/24496
+		{"select 1 group by 1", true, "SELECT 1 GROUP BY 1"},
+		{"select 1 from dual group by 1", true, "SELECT 1 GROUP BY 1"},
+
+		// for https://github.com/pingcap/parser/issues/963
+		{"select min(b) b from (select min(t.b) b from t where t.a = '');", true, "SELECT MIN(`b`) AS `b` FROM (SELECT MIN(`t`.`b`) AS `b` FROM `t` WHERE `t`.`a`=_UTF8MB4'')"},
+		{"select min(b) b from (select min(t.b) b from t where t.a = '') as t1;", true, "SELECT MIN(`b`) AS `b` FROM (SELECT MIN(`t`.`b`) AS `b` FROM `t` WHERE `t`.`a`=_UTF8MB4'') AS `t1`"},
+
+		// for https://github.com/pingcap/tidb/issues/1050
 		{`SELECT /*!40001 SQL_NO_CACHE */ * FROM test WHERE 1 limit 0, 2000;`, true, "SELECT SQL_NO_CACHE * FROM `test` WHERE 1 LIMIT 0,2000"},
 
 		{`ANALYZE TABLE t`, true, "ANALYZE TABLE `t`"},
@@ -806,41 +919,41 @@ AAAAAAAAAAAA5gm5Mg==
 		{`select * from t1 partition ()`, false, ""},
 
 		// for split table index region syntax
-		{"split table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` INDEX `idx1` BY ('a'),('b'),('c')"},
+		{"split table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
 		{"split table t1 index idx1 by (1)", true, "SPLIT TABLE `t1` INDEX `idx1` BY (1)"},
-		{"split table t1 index idx1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` INDEX `idx1` BY ('abc',123),('xyz'),('yz',1000)"},
+		{"split table t1 index idx1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` INDEX `idx1` BY (_UTF8MB4'abc',123),(_UTF8MB4'xyz'),(_UTF8MB4'yz',1000)"},
 		{"split table t1 index idx1 by ", false, ""},
-		{"split table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split table t1 index idx1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN ('a',1) AND ('z',2) REGIONS 10"},
+		{"split table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split table t1 index idx1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN (_UTF8MB4'a',1) AND (_UTF8MB4'z',2) REGIONS 10"},
 		{"split table t1 index idx1 between () and () regions 10", true, "SPLIT TABLE `t1` INDEX `idx1` BETWEEN () AND () REGIONS 10"},
 		{"split table t1 index by (1)", false, ""},
 
-		{"split region for table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split partition table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split region for partition table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split region for table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR TABLE `t1` INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split partition table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT PARTITION TABLE `t1` INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split region for partition table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
+		{"split region for table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split partition table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split region for partition table t1 index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split region for table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR TABLE `t1` INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split partition table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT PARTITION TABLE `t1` INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split region for partition table t1 index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
 
-		{"split region for table t1 partition (p0,p1) index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` PARTITION(`p0`, `p1`) INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split partition table t1 partition (p0) index idx1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split region for partition table t1 partition (p0) index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BY ('a'),('b'),('c')"},
-		{"split region for table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split partition table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split region for partition table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN ('a') AND ('z') REGIONS 10"},
+		{"split region for table t1 partition (p0,p1) index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` PARTITION(`p0`, `p1`) INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split partition table t1 partition (p0) index idx1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split region for partition table t1 partition (p0) index idx1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split region for table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split partition table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split region for partition table t1 partition (p0) index idx1 between ('a') and ('z') regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` PARTITION(`p0`) INDEX `idx1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
 
 		// for split table region.
-		{"split table t1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` BY ('a'),('b'),('c')"},
+		{"split table t1 by ('a'),('b'),('c')", true, "SPLIT TABLE `t1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
 		{"split table t1 by (1)", true, "SPLIT TABLE `t1` BY (1)"},
-		{"split table t1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` BY ('abc',123),('xyz'),('yz',1000)"},
+		{"split table t1 by ('abc',123), ('xyz'), ('yz', 1000)", true, "SPLIT TABLE `t1` BY (_UTF8MB4'abc',123),(_UTF8MB4'xyz'),(_UTF8MB4'yz',1000)"},
 		{"split table t1 by ", false, ""},
-		{"split table t1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` BETWEEN ('a') AND ('z') REGIONS 10"},
-		{"split table t1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` BETWEEN ('a',1) AND ('z',2) REGIONS 10"},
+		{"split table t1 between ('a') and ('z') regions 10", true, "SPLIT TABLE `t1` BETWEEN (_UTF8MB4'a') AND (_UTF8MB4'z') REGIONS 10"},
+		{"split table t1 between ('a',1) and ('z',2) regions 10", true, "SPLIT TABLE `t1` BETWEEN (_UTF8MB4'a',1) AND (_UTF8MB4'z',2) REGIONS 10"},
 		{"split table t1 between () and () regions 10", true, "SPLIT TABLE `t1` BETWEEN () AND () REGIONS 10"},
 
-		{"split region for table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split partition table t1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` BY ('a'),('b'),('c')"},
-		{"split region for partition table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` BY ('a'),('b'),('c')"},
+		{"split region for table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR TABLE `t1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split partition table t1 by ('a'),('b'),('c')", true, "SPLIT PARTITION TABLE `t1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
+		{"split region for partition table t1 by ('a'),('b'),('c')", true, "SPLIT REGION FOR PARTITION TABLE `t1` BY (_UTF8MB4'a'),(_UTF8MB4'b'),(_UTF8MB4'c')"},
 		{"split region for table t1 between (1) and (1000) regions 10", true, "SPLIT REGION FOR TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
 		{"split partition table t1 between (1) and (1000) regions 10", true, "SPLIT PARTITION TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
 		{"split region for partition table t1 between (1) and (1000) regions 10", true, "SPLIT REGION FOR PARTITION TABLE `t1` BETWEEN (1) AND (1000) REGIONS 10"},
@@ -881,27 +994,60 @@ AAAAAAAAAAAA5gm5Mg==
 		// for alter instance.
 		{"ALTER INSTANCE RELOAD TLS", true, "ALTER INSTANCE RELOAD TLS"},
 		{"ALTER INSTANCE RELOAD TLS NO ROLLBACK ON ERROR", true, "ALTER INSTANCE RELOAD TLS NO ROLLBACK ON ERROR"},
+
+		// for create sequence with signed value especially with Two's Complement Min.
+		// for issue #17948
+		{"CREATE SEQUENCE seq INCREMENT - 9223372036854775807", true, "CREATE SEQUENCE `seq` INCREMENT BY -9223372036854775807"},
+		{"CREATE SEQUENCE seq INCREMENT - 9223372036854775808", true, "CREATE SEQUENCE `seq` INCREMENT BY -9223372036854775808"},
+		{"CREATE SEQUENCE seq INCREMENT -9223372036854775808", true, "CREATE SEQUENCE `seq` INCREMENT BY -9223372036854775808"},
+		{"CREATE SEQUENCE seq INCREMENT -9223372036854775809", false, ""},
+
+		{"select `t`.`1a`.1 from t;", true, "SELECT `t`.`1a`.`1` FROM `t`"},
+		{"select * from 1db.1table;", true, "SELECT * FROM `1db`.`1table`"},
+
+		// for show placement
+		{"SHOW PLACEMENT", true, "SHOW PLACEMENT"},
+		{"SHOW PLACEMENT LIKE 'POLICY foo%'", true, "SHOW PLACEMENT LIKE _UTF8MB4'POLICY foo%'"},
+		{"SHOW PLACEMENT WHERE Target='TABLE test.t1'", true, "SHOW PLACEMENT WHERE `Target`=_UTF8MB4'TABLE test.t1'"},
+		{"SHOW PLACEMENT FOR DATABASE db1", true, "SHOW PLACEMENT FOR DATABASE `db1`"},
+		{"SHOW PLACEMENT FOR SCHEMA db1", true, "SHOW PLACEMENT FOR DATABASE `db1`"},
+		{"SHOW PLACEMENT FOR TABLE tb1", true, "SHOW PLACEMENT FOR TABLE `tb1`"},
+		{"SHOW PLACEMENT FOR TABLE db1.tb1", true, "SHOW PLACEMENT FOR TABLE `db1`.`tb1`"},
+		{"SHOW PLACEMENT FOR TABLE tb1 PARTITION p1", true, "SHOW PLACEMENT FOR TABLE `tb1` PARTITION `p1`"},
+		{"SHOW PLACEMENT FOR TABLE db1.tb1 PARTITION p1", true, "SHOW PLACEMENT FOR TABLE `db1`.`tb1` PARTITION `p1`"},
+		{"SHOW PLACEMENT FOR", false, ""},
+		{"SHOW PLACEMENT DATABASE db1", false, ""},
+		{"SHOW PLACEMENT FOR DB db1", false, ""},
+		{"SHOW PLACEMENT FOR DATABASE db1 TABLE tb1", false, ""},
+		{"SHOW PLACEMENT FOR PARTITION p1", false, ""},
+		{"SHOW PLACEMENT FOR DB LIKE '%'", false, ""},
+		{"SHOW PLACEMENT FOR DB db1 LIKE '%'", false, ""},
+
+		// for show placement labels
+		{"SHOW PLACEMENT LABELS", true, "SHOW PLACEMENT LABELS"},
+		{"SHOW PLACEMENT LABELS LIKE '%zone%'", true, "SHOW PLACEMENT LABELS LIKE _UTF8MB4'%zone%'"},
+		{"SHOW PLACEMENT LABELS WHERE label='l123'", true, "SHOW PLACEMENT LABELS WHERE `label`=_UTF8MB4'l123'"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestDBAStmt(c *C) {
+func TestDBAStmt(t *testing.T) {
 	table := []testCase{
 		// for SHOW statement
-		{"SHOW VARIABLES LIKE 'character_set_results'", true, "SHOW SESSION VARIABLES LIKE 'character_set_results'"},
-		{"SHOW GLOBAL VARIABLES LIKE 'character_set_results'", true, "SHOW GLOBAL VARIABLES LIKE 'character_set_results'"},
-		{"SHOW SESSION VARIABLES LIKE 'character_set_results'", true, "SHOW SESSION VARIABLES LIKE 'character_set_results'"},
+		{"SHOW VARIABLES LIKE 'character_set_results'", true, "SHOW SESSION VARIABLES LIKE _UTF8MB4'character_set_results'"},
+		{"SHOW GLOBAL VARIABLES LIKE 'character_set_results'", true, "SHOW GLOBAL VARIABLES LIKE _UTF8MB4'character_set_results'"},
+		{"SHOW SESSION VARIABLES LIKE 'character_set_results'", true, "SHOW SESSION VARIABLES LIKE _UTF8MB4'character_set_results'"},
 		{"SHOW VARIABLES", true, "SHOW SESSION VARIABLES"},
 		{"SHOW GLOBAL VARIABLES", true, "SHOW GLOBAL VARIABLES"},
-		{"SHOW GLOBAL VARIABLES WHERE Variable_name = 'autocommit'", true, "SHOW GLOBAL VARIABLES WHERE `Variable_name`='autocommit'"},
+		{"SHOW GLOBAL VARIABLES WHERE Variable_name = 'autocommit'", true, "SHOW GLOBAL VARIABLES WHERE `Variable_name`=_UTF8MB4'autocommit'"},
 		{"SHOW STATUS", true, "SHOW SESSION STATUS"},
 		{"SHOW GLOBAL STATUS", true, "SHOW GLOBAL STATUS"},
 		{"SHOW SESSION STATUS", true, "SHOW SESSION STATUS"},
-		{`SHOW STATUS LIKE 'Up%'`, true, "SHOW SESSION STATUS LIKE 'Up%'"},
+		{`SHOW STATUS LIKE 'Up%'`, true, "SHOW SESSION STATUS LIKE _UTF8MB4'Up%'"},
 		{`SHOW STATUS WHERE Variable_name`, true, "SHOW SESSION STATUS WHERE `Variable_name`"},
-		{`SHOW STATUS WHERE Variable_name LIKE 'Up%'`, true, "SHOW SESSION STATUS WHERE `Variable_name` LIKE 'Up%'"},
+		{`SHOW STATUS WHERE Variable_name LIKE 'Up%'`, true, "SHOW SESSION STATUS WHERE `Variable_name` LIKE _UTF8MB4'Up%'"},
 		{`SHOW FULL TABLES FROM icar_qa LIKE play_evolutions`, true, "SHOW FULL TABLES IN `icar_qa` LIKE `play_evolutions`"},
-		{`SHOW FULL TABLES WHERE Table_Type != 'VIEW'`, true, "SHOW FULL TABLES WHERE `Table_Type`!='VIEW'"},
+		{`SHOW FULL TABLES WHERE Table_Type != 'VIEW'`, true, "SHOW FULL TABLES WHERE `Table_Type`!=_UTF8MB4'VIEW'"},
 		{`SHOW GRANTS`, true, "SHOW GRANTS"},
 		{`SHOW GRANTS FOR 'test'@'localhost'`, true, "SHOW GRANTS FOR `test`@`localhost`"},
 		{`SHOW GRANTS FOR current_user()`, true, "SHOW GRANTS FOR CURRENT_USER"},
@@ -911,19 +1057,19 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		{`SHOW COLUMNS FROM City;`, true, "SHOW COLUMNS IN `City`"},
 		{`SHOW COLUMNS FROM tv189.1_t_1_x;`, true, "SHOW COLUMNS IN `tv189`.`1_t_1_x`"},
 		{`SHOW FIELDS FROM City;`, true, "SHOW COLUMNS IN `City`"},
-		{`SHOW TRIGGERS LIKE 't'`, true, "SHOW TRIGGERS LIKE 't'"},
-		{`SHOW DATABASES LIKE 'test2'`, true, "SHOW DATABASES LIKE 'test2'"},
+		{`SHOW TRIGGERS LIKE 't'`, true, "SHOW TRIGGERS LIKE _UTF8MB4't'"},
+		{`SHOW DATABASES LIKE 'test2'`, true, "SHOW DATABASES LIKE _UTF8MB4'test2'"},
 		// PROCEDURE and FUNCTION are currently not supported.
 		// And FUNCTION reuse show procedure status process logic.
-		{`SHOW PROCEDURE STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`='test'"},
-		{`SHOW FUNCTION STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`='test'"},
+		{`SHOW PROCEDURE STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`=_UTF8MB4'test'"},
+		{`SHOW FUNCTION STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`=_UTF8MB4'test'"},
 		{`SHOW INDEX FROM t;`, true, "SHOW INDEX IN `t`"},
 		{`SHOW KEYS FROM t;`, true, "SHOW INDEX IN `t`"},
 		{`SHOW INDEX IN t;`, true, "SHOW INDEX IN `t`"},
 		{`SHOW KEYS IN t;`, true, "SHOW INDEX IN `t`"},
 		{`SHOW INDEXES IN t where true;`, true, "SHOW INDEX IN `t` WHERE TRUE"},
 		{`SHOW KEYS FROM t FROM test where true;`, true, "SHOW INDEX IN `test`.`t` WHERE TRUE"},
-		{`SHOW EVENTS FROM test_db WHERE definer = 'current_user'`, true, "SHOW EVENTS IN `test_db` WHERE `definer`='current_user'"},
+		{`SHOW EVENTS FROM test_db WHERE definer = 'current_user'`, true, "SHOW EVENTS IN `test_db` WHERE `definer`=_UTF8MB4'current_user'"},
 		{`SHOW PLUGINS`, true, "SHOW PLUGINS"},
 		{`SHOW PROFILES`, true, "SHOW PROFILES"},
 		{`SHOW PROFILE`, true, "SHOW PROFILE"},
@@ -938,8 +1084,8 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		{"show charset", true, "SHOW CHARSET"},
 		// for show collation
 		{"show collation", true, "SHOW COLLATION"},
-		{`show collation like 'utf8%'`, true, "SHOW COLLATION LIKE 'utf8%'"},
-		{"show collation where Charset = 'utf8' and Collation = 'utf8_bin'", true, "SHOW COLLATION WHERE `Charset`='utf8' AND `Collation`='utf8_bin'"},
+		{`show collation like 'utf8%'`, true, "SHOW COLLATION LIKE _UTF8MB4'utf8%'"},
+		{"show collation where Charset = 'utf8' and Collation = 'utf8_bin'", true, "SHOW COLLATION WHERE `Charset`=_UTF8MB4'utf8' AND `Collation`=_UTF8MB4'utf8_bin'"},
 		// for show full columns
 		{"show columns in t;", true, "SHOW COLUMNS IN `t`"},
 		{"show full columns in t;", true, "SHOW FULL COLUMNS IN `t`"},
@@ -962,33 +1108,46 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		// for show create sequence
 		{"show create sequence seq", true, "SHOW CREATE SEQUENCE `seq`"},
 		{"show create sequence test.seq", true, "SHOW CREATE SEQUENCE `test`.`seq`"},
+		// for show stats_extended.
+		{"show stats_extended", true, "SHOW STATS_EXTENDED"},
+		{"show stats_extended where table_name = 't'", true, "SHOW STATS_EXTENDED WHERE `table_name`=_UTF8MB4't'"},
 		// for show stats_meta.
 		{"show stats_meta", true, "SHOW STATS_META"},
-		{"show stats_meta where table_name = 't'", true, "SHOW STATS_META WHERE `table_name`='t'"},
+		{"show stats_meta where table_name = 't'", true, "SHOW STATS_META WHERE `table_name`=_UTF8MB4't'"},
 		// for show stats_histograms
 		{"show stats_histograms", true, "SHOW STATS_HISTOGRAMS"},
-		{"show stats_histograms where col_name = 'a'", true, "SHOW STATS_HISTOGRAMS WHERE `col_name`='a'"},
+		{"show stats_histograms where col_name = 'a'", true, "SHOW STATS_HISTOGRAMS WHERE `col_name`=_UTF8MB4'a'"},
 		// for show stats_buckets
 		{"show stats_buckets", true, "SHOW STATS_BUCKETS"},
-		{"show stats_buckets where col_name = 'a'", true, "SHOW STATS_BUCKETS WHERE `col_name`='a'"},
+		{"show stats_buckets where col_name = 'a'", true, "SHOW STATS_BUCKETS WHERE `col_name`=_UTF8MB4'a'"},
 		// for show stats_healthy.
 		{"show stats_healthy", true, "SHOW STATS_HEALTHY"},
-		{"show stats_healthy where table_name = 't'", true, "SHOW STATS_HEALTHY WHERE `table_name`='t'"},
+		{"show stats_healthy where table_name = 't'", true, "SHOW STATS_HEALTHY WHERE `table_name`=_UTF8MB4't'"},
+		// for show stats_topn.
+		{"show stats_topn", true, "SHOW STATS_TOPN"},
+		{"show stats_topn where table_name = 't'", true, "SHOW STATS_TOPN WHERE `table_name`=_UTF8MB4't'"},
+		// for show histograms_in_flight.
+		{"show histograms_in_flight", true, "SHOW HISTOGRAMS_IN_FLIGHT"},
+		// for show column_stats_usage.
+		{"show column_stats_usage", true, "SHOW COLUMN_STATS_USAGE"},
+		{"show column_stats_usage where table_name = 't'", true, "SHOW COLUMN_STATS_USAGE WHERE `table_name`=_UTF8MB4't'"},
 		// for show pump/drainer status.
 		{"show pump status", true, "SHOW PUMP STATUS"},
 		{"show drainer status", true, "SHOW DRAINER STATUS"},
 		{"show analyze status", true, "SHOW ANALYZE STATUS"},
-		{"show analyze status where table_name = 't'", true, "SHOW ANALYZE STATUS WHERE `table_name`='t'"},
-		{"show analyze status where table_name like '%'", true, "SHOW ANALYZE STATUS WHERE `table_name` LIKE '%'"},
+		{"show analyze status where table_name = 't'", true, "SHOW ANALYZE STATUS WHERE `table_name`=_UTF8MB4't'"},
+		{"show analyze status where table_name like '%'", true, "SHOW ANALYZE STATUS WHERE `table_name` LIKE _UTF8MB4'%'"},
 		// for show builtins
 		{"show builtins", true, "SHOW BUILTINS"},
 		// for show backup & restore
 		{"show backups", true, "SHOW BACKUPS"},
-		{"show restores like 'r0001'", true, "SHOW RESTORES LIKE 'r0001'"},
+		{"show restores like 'r0001'", true, "SHOW RESTORES LIKE _UTF8MB4'r0001'"},
 		{"show backups where start_time > now() - interval 10 hour", true, "SHOW BACKUPS WHERE `start_time`>DATE_SUB(NOW(), INTERVAL 10 HOUR)"},
 		{"show backup", false, ""},
 		{"show restore", false, ""},
 		{"show imports", true, "SHOW IMPORTS"},
+		// for show create import
+		{"show create import test", true, "SHOW CREATE IMPORT `test`"},
 
 		// for load stats
 		{"load stats '/tmp/stats.json'", true, "LOAD STATS '/tmp/stats.json'"},
@@ -1005,11 +1164,13 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		{"SET @_e._$. = 1", true, "SET @`_e._$.`=1"},
 		{"SET @~f = 1", false, ""},
 		{"SET @`g,` = 1", true, "SET @`g,`=1"},
+		{"SET", false, ""},
+		{"SET @a = 1, @b := 2", true, "SET @`a`=1, @`b`=2"},
 		// session system variables
 		{"SET SESSION autocommit = 1", true, "SET @@SESSION.`autocommit`=1"},
 		{"SET @@session.autocommit = 1", true, "SET @@SESSION.`autocommit`=1"},
 		{"SET @@SESSION.autocommit = 1", true, "SET @@SESSION.`autocommit`=1"},
-		{"SET @@GLOBAL.GTID_PURGED = '123'", true, "SET @@GLOBAL.`gtid_purged`='123'"},
+		{"SET @@GLOBAL.GTID_PURGED = '123'", true, "SET @@GLOBAL.`gtid_purged`=_UTF8MB4'123'"},
 		{"SET @MYSQLDUMP_TEMP_LOG_BIN = @@SESSION.SQL_LOG_BIN", true, "SET @`MYSQLDUMP_TEMP_LOG_BIN`=@@SESSION.`sql_log_bin`"},
 		{"SET LOCAL autocommit = 1", true, "SET @@SESSION.`autocommit`=1"},
 		{"SET @@local.autocommit = 1", true, "SET @@SESSION.`autocommit`=1"},
@@ -1027,26 +1188,28 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		// set default value
 		{"SET @@global.autocommit = default", true, "SET @@GLOBAL.`autocommit`=DEFAULT"},
 		{"SET @@session.autocommit = default", true, "SET @@SESSION.`autocommit`=DEFAULT"},
+		// set binary value
+		{"SET @@character_set_results = binary", true, "SET @@SESSION.`character_set_results`=_UTF8MB4'BINARY'"},
 		// SET CHARACTER SET
-		{"SET CHARACTER SET utf8mb4;", true, "SET NAMES 'utf8mb4'"},
-		{"SET CHARACTER SET 'utf8mb4';", true, "SET NAMES 'utf8mb4'"},
+		{"SET CHARACTER SET utf8mb4;", true, "SET CHARSET 'utf8mb4'"},
+		{"SET CHARACTER SET 'utf8mb4';", true, "SET CHARSET 'utf8mb4'"},
 		// set password
 		{"SET PASSWORD = 'password';", true, "SET PASSWORD='password'"},
 		{"SET PASSWORD FOR 'root'@'localhost' = 'password';", true, "SET PASSWORD FOR `root`@`localhost`='password'"},
 		// SET TRANSACTION Syntax
-		{"SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@SESSION.`tx_isolation`='REPEATABLE-READ'"},
-		{"SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@GLOBAL.`tx_isolation`='REPEATABLE-READ'"},
-		{"SET SESSION TRANSACTION READ WRITE", true, "SET @@SESSION.`tx_read_only`='0'"},
-		{"SET SESSION TRANSACTION READ ONLY", true, "SET @@SESSION.`tx_read_only`='1'"},
-		{"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", true, "SET @@SESSION.`tx_isolation`='READ-COMMITTED'"},
-		{"SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED", true, "SET @@SESSION.`tx_isolation`='READ-UNCOMMITTED'"},
-		{"SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE", true, "SET @@SESSION.`tx_isolation`='SERIALIZABLE'"},
-		{"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@SESSION.`tx_isolation_one_shot`='REPEATABLE-READ'"},
-		{"SET TRANSACTION READ WRITE", true, "SET @@SESSION.`tx_read_only`='0'"},
-		{"SET TRANSACTION READ ONLY", true, "SET @@SESSION.`tx_read_only`='1'"},
-		{"SET TRANSACTION ISOLATION LEVEL READ COMMITTED", true, "SET @@SESSION.`tx_isolation_one_shot`='READ-COMMITTED'"},
-		{"SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED", true, "SET @@SESSION.`tx_isolation_one_shot`='READ-UNCOMMITTED'"},
-		{"SET TRANSACTION ISOLATION LEVEL SERIALIZABLE", true, "SET @@SESSION.`tx_isolation_one_shot`='SERIALIZABLE'"},
+		{"SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@SESSION.`tx_isolation`=_UTF8MB4'REPEATABLE-READ'"},
+		{"SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@GLOBAL.`tx_isolation`=_UTF8MB4'REPEATABLE-READ'"},
+		{"SET SESSION TRANSACTION READ WRITE", true, "SET @@SESSION.`tx_read_only`=_UTF8MB4'0'"},
+		{"SET SESSION TRANSACTION READ ONLY", true, "SET @@SESSION.`tx_read_only`=_UTF8MB4'1'"},
+		{"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", true, "SET @@SESSION.`tx_isolation`=_UTF8MB4'READ-COMMITTED'"},
+		{"SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED", true, "SET @@SESSION.`tx_isolation`=_UTF8MB4'READ-UNCOMMITTED'"},
+		{"SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE", true, "SET @@SESSION.`tx_isolation`=_UTF8MB4'SERIALIZABLE'"},
+		{"SET TRANSACTION ISOLATION LEVEL REPEATABLE READ", true, "SET @@SESSION.`tx_isolation_one_shot`=_UTF8MB4'REPEATABLE-READ'"},
+		{"SET TRANSACTION READ WRITE", true, "SET @@SESSION.`tx_read_only`=_UTF8MB4'0'"},
+		{"SET TRANSACTION READ ONLY", true, "SET @@SESSION.`tx_read_only`=_UTF8MB4'1'"},
+		{"SET TRANSACTION ISOLATION LEVEL READ COMMITTED", true, "SET @@SESSION.`tx_isolation_one_shot`=_UTF8MB4'READ-COMMITTED'"},
+		{"SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED", true, "SET @@SESSION.`tx_isolation_one_shot`=_UTF8MB4'READ-UNCOMMITTED'"},
+		{"SET TRANSACTION ISOLATION LEVEL SERIALIZABLE", true, "SET @@SESSION.`tx_isolation_one_shot`=_UTF8MB4'SERIALIZABLE'"},
 		// for set names
 		{"set names utf8", true, "SET NAMES 'utf8'"},
 		{"set names utf8 collate utf8_unicode_ci", true, "SET NAMES 'utf8' COLLATE 'utf8_unicode_ci'"},
@@ -1054,9 +1217,9 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 
 		// for set character set | name default
 		{"set names default", true, "SET NAMES DEFAULT"},
-		{"set character set default", true, "SET NAMES DEFAULT"},
-		{"set charset default", true, "SET NAMES DEFAULT"},
-		{"set char set default", true, "SET NAMES DEFAULT"},
+		{"set character set default", true, "SET CHARSET DEFAULT"},
+		{"set charset default", true, "SET CHARSET DEFAULT"},
+		{"set char set default", true, "SET CHARSET DEFAULT"},
 
 		{"set role `role1`", true, "SET ROLE `role1`@`%`"},
 		{"SET ROLE DEFAULT", true, "SET ROLE DEFAULT"},
@@ -1065,18 +1228,18 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		{"SET DEFAULT ROLE administrator, developer TO `joe`@`10.0.0.1`", true, "SET DEFAULT ROLE `administrator`@`%`, `developer`@`%` TO `joe`@`10.0.0.1`"},
 		// for set names and set vars
 		{"set names utf8, @@session.sql_mode=1;", true, "SET NAMES 'utf8', @@SESSION.`sql_mode`=1"},
-		{"set @@session.sql_mode=1, names utf8, charset utf8;", true, "SET @@SESSION.`sql_mode`=1, NAMES 'utf8', NAMES 'utf8'"},
+		{"set @@session.sql_mode=1, names utf8, charset utf8;", true, "SET @@SESSION.`sql_mode`=1, NAMES 'utf8', CHARSET 'utf8'"},
 
 		// for set/show config
-		{"set config TIKV LOG.LEVEL='info'", true, "SET CONFIG TIKV LOG.LEVEL = 'info'"},
-		{"set config PD LOG.LEVEL='info'", true, "SET CONFIG PD LOG.LEVEL = 'info'"},
-		{"set config TIDB LOG.LEVEL='info'", true, "SET CONFIG TIDB LOG.LEVEL = 'info'"},
-		{"set config '127.0.0.1:3306' LOG.LEVEL='info'", true, "SET CONFIG '127.0.0.1:3306' LOG.LEVEL = 'info'"},
+		{"set config TIKV LOG.LEVEL='info'", true, "SET CONFIG TIKV LOG.LEVEL = _UTF8MB4'info'"},
+		{"set config PD LOG.LEVEL='info'", true, "SET CONFIG PD LOG.LEVEL = _UTF8MB4'info'"},
+		{"set config TIDB LOG.LEVEL='info'", true, "SET CONFIG TIDB LOG.LEVEL = _UTF8MB4'info'"},
+		{"set config '127.0.0.1:3306' LOG.LEVEL='info'", true, "SET CONFIG '127.0.0.1:3306' LOG.LEVEL = _UTF8MB4'info'"},
 		{"set config '127.0.0.1:3306' AUTO-COMPACTION-MODE=TRUE", true, "SET CONFIG '127.0.0.1:3306' AUTO-COMPACTION-MODE = TRUE"},
-		{"set config '127.0.0.1:3306' LABEL-PROPERTY.REJECT-LEADER.KEY='zone'", true, "SET CONFIG '127.0.0.1:3306' LABEL-PROPERTY.REJECT-LEADER.KEY = 'zone'"},
+		{"set config '127.0.0.1:3306' LABEL-PROPERTY.REJECT-LEADER.KEY='zone'", true, "SET CONFIG '127.0.0.1:3306' LABEL-PROPERTY.REJECT-LEADER.KEY = _UTF8MB4'zone'"},
 		{"show config", true, "SHOW CONFIG"},
-		{"show config where type='tidb'", true, "SHOW CONFIG WHERE `type`='tidb'"},
-		{"show config where instance='127.0.0.1:3306'", true, "SHOW CONFIG WHERE `instance`='127.0.0.1:3306'"},
+		{"show config where type='tidb'", true, "SHOW CONFIG WHERE `type`=_UTF8MB4'tidb'"},
+		{"show config where instance='127.0.0.1:3306'", true, "SHOW CONFIG WHERE `instance`=_UTF8MB4'127.0.0.1:3306'"},
 		{"create table CONFIG (a int)", true, "CREATE TABLE `CONFIG` (`a` INT)"}, // check that `CONFIG` is unreserved keyword
 
 		// for FLUSH statement
@@ -1100,15 +1263,28 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		{"flush error logs", true, "FLUSH ERROR LOGS"},
 		{"flush general logs", true, "FLUSH GENERAL LOGS"},
 		{"flush slow logs", true, "FLUSH SLOW LOGS"},
+		{"flush client_errors_summary", true, "FLUSH CLIENT_ERRORS_SUMMARY"},
 
 		// for change statement
 		{"change pump to node_state ='paused' for node_id '127.0.0.1:8250'", true, "CHANGE PUMP TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:8250'"},
 		{"change drainer to node_state ='paused' for node_id '127.0.0.1:8249'", true, "CHANGE DRAINER TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:8249'"},
+
+		// for call statement
+		{"call ", false, ""},
+		{"call test", true, "CALL `test`()"},
+		{"call test()", true, "CALL `test`()"},
+		{"call test(1, 'test', true)", true, "CALL `test`(1, _UTF8MB4'test', TRUE)"},
+		{"call x.y;", true, "CALL `x`.`y`()"},
+		{"call x.y();", true, "CALL `x`.`y`()"},
+		{"call x.y('p', 'q', 'r');", true, "CALL `x`.`y`(_UTF8MB4'p', _UTF8MB4'q', _UTF8MB4'r')"},
+		{"call `x`.`y`;", true, "CALL `x`.`y`()"},
+		{"call `x`.`y`();", true, "CALL `x`.`y`()"},
+		{"call `x`.`y`('p', 'q', 'r');", true, "CALL `x`.`y`(_UTF8MB4'p', _UTF8MB4'q', _UTF8MB4'r')"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestSetVariable(c *C) {
+func TestSetVariable(t *testing.T) {
 	table := []struct {
 		Input    string
 		Name     string
@@ -1120,56 +1296,58 @@ func (s *testParserSuite) TestSetVariable(c *C) {
 		{"set xx.xx = 666", "xx.xx", false, true},
 		// Set session system variable xx.xx
 		{"set session xx.xx = 666", "xx.xx", false, true},
+		{"set local xx.xx = 666", "xx.xx", false, true},
 		{"set global xx.xx = 666", "xx.xx", true, true},
 
 		{"set @@xx.xx = 666", "xx.xx", false, true},
 		{"set @@session.xx.xx = 666", "xx.xx", false, true},
+		{"set @@local.xx.xx = 666", "xx.xx", false, true},
 		{"set @@global.xx.xx = 666", "xx.xx", true, true},
 
 		// Set user defined variable xx.xx
 		{"set @xx.xx = 666", "xx.xx", false, false},
 	}
 
-	parser := parser.New()
-	for _, t := range table {
-		stmt, err := parser.ParseOneStmt(t.Input, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range table {
+		stmt, err := p.ParseOneStmt(tbl.Input, "", "")
+		require.NoError(t, err)
 
 		setStmt, ok := stmt.(*ast.SetStmt)
-		c.Assert(ok, IsTrue)
-		c.Assert(setStmt.Variables, HasLen, 1)
+		require.True(t, ok)
+		require.Len(t, setStmt.Variables, 1)
 
 		v := setStmt.Variables[0]
-		c.Assert(v.Name, Equals, t.Name)
-		c.Assert(v.IsGlobal, Equals, t.IsGlobal)
-		c.Assert(v.IsSystem, Equals, t.IsSystem)
+		require.Equal(t, tbl.Name, v.Name)
+		require.Equal(t, tbl.IsGlobal, v.IsGlobal)
+		require.Equal(t, tbl.IsSystem, v.IsSystem)
 	}
 
-	_, err := parser.ParseOneStmt("set xx.xx.xx = 666", "", "")
-	c.Assert(err, NotNil)
+	_, err := p.ParseOneStmt("set xx.xx.xx = 666", "", "")
+	require.Error(t, err)
 }
 
-func (s *testParserSuite) TestFlushTable(c *C) {
-	parser := parser.New()
-	stmt, _, err := parser.Parse("flush local tables tbl1,tbl2 with read lock", "", "")
-	c.Assert(err, IsNil)
+func TestFlushTable(t *testing.T) {
+	p := parser.New()
+	stmt, _, err := p.Parse("flush local tables tbl1,tbl2 with read lock", "", "")
+	require.NoError(t, err)
 	flushTable := stmt[0].(*ast.FlushStmt)
-	c.Assert(flushTable.Tp, Equals, ast.FlushTables)
-	c.Assert(flushTable.Tables[0].Name.L, Equals, "tbl1")
-	c.Assert(flushTable.Tables[1].Name.L, Equals, "tbl2")
-	c.Assert(flushTable.NoWriteToBinLog, IsTrue)
-	c.Assert(flushTable.ReadLock, IsTrue)
+	require.Equal(t, ast.FlushTables, flushTable.Tp)
+	require.Equal(t, "tbl1", flushTable.Tables[0].Name.L)
+	require.Equal(t, "tbl2", flushTable.Tables[1].Name.L)
+	require.True(t, flushTable.NoWriteToBinLog)
+	require.True(t, flushTable.ReadLock)
 }
 
-func (s *testParserSuite) TestFlushPrivileges(c *C) {
-	parser := parser.New()
-	stmt, _, err := parser.Parse("flush privileges", "", "")
-	c.Assert(err, IsNil)
+func TestFlushPrivileges(t *testing.T) {
+	p := parser.New()
+	stmt, _, err := p.Parse("flush privileges", "", "")
+	require.NoError(t, err)
 	flushPrivilege := stmt[0].(*ast.FlushStmt)
-	c.Assert(flushPrivilege.Tp, Equals, ast.FlushPrivileges)
+	require.Equal(t, ast.FlushPrivileges, flushPrivilege.Tp)
 }
 
-func (s *testParserSuite) TestExpression(c *C) {
+func TestExpression(t *testing.T) {
 	table := []testCase{
 		// sign expression
 		{"SELECT ++1", true, "SELECT ++1"},
@@ -1179,17 +1357,21 @@ func (s *testParserSuite) TestExpression(c *C) {
 		{"SELECT --1", true, "SELECT --1"},
 
 		// for string literal
-		{`select '''a''', """a"""`, true, "SELECT '''a''','\"a\"'"},
+		{`select '''a''', """a"""`, true, "SELECT _UTF8MB4'''a''',_UTF8MB4'\"a\"'"},
 		{`select ''a''`, false, ""},
 		{`select ""a""`, false, ""},
-		{`select '''a''';`, true, "SELECT '''a'''"},
-		{`select '\'a\'';`, true, "SELECT '''a'''"},
-		{`select "\"a\"";`, true, "SELECT '\"a\"'"},
-		{`select """a""";`, true, "SELECT '\"a\"'"},
+		{`select '''a''';`, true, "SELECT _UTF8MB4'''a'''"},
+		{`select '\'a\'';`, true, "SELECT _UTF8MB4'''a'''"},
+		{`select "\"a\"";`, true, "SELECT _UTF8MB4'\"a\"'"},
+		{`select """a""";`, true, "SELECT _UTF8MB4'\"a\"'"},
 		{`select _utf8"string";`, true, "SELECT _UTF8'string'"},
 		{`select _binary"string";`, true, "SELECT _BINARY'string'"},
 		{"select N'string'", true, "SELECT _UTF8'string'"},
 		{"select n'string'", true, "SELECT _UTF8'string'"},
+		{"select _utf8 0xD0B1;", true, "SELECT _UTF8 x'd0b1'"},
+		{"select _utf8 X'D0B1';", true, "SELECT _UTF8 x'd0b1'"},
+		{"select _utf8 0b1101000010110001;", true, "SELECT _UTF8 b'1101000010110001'"},
+		{"select _utf8 B'1101000010110001';", true, "SELECT _UTF8 b'1101000010110001'"},
 		// for comparison
 		{"select 1 <=> 0, 1 <=> null, 1 = null", true, "SELECT 1<=>0,1<=>NULL,1=NULL"},
 		// for date literal
@@ -1204,19 +1386,24 @@ func (s *testParserSuite) TestExpression(c *C) {
 
 		// The ODBC syntax for time/date/timestamp literal.
 		// See: https://dev.mysql.com/doc/refman/5.7/en/date-and-time-literals.html
-		{"select {ts '1989-09-10 11:11:11'}", true, "SELECT '1989-09-10 11:11:11'"},
-		{"select {d '1989-09-10'}", true, "SELECT '1989-09-10'"},
-		{"select {t '00:00:00.111'}", true, "SELECT '00:00:00.111'"},
+		{"select {ts '1989-09-10 11:11:11'}", true, "SELECT TIMESTAMP '1989-09-10 11:11:11'"},
+		{"select {d '1989-09-10'}", true, "SELECT DATE '1989-09-10'"},
+		{"select {t '00:00:00.111'}", true, "SELECT TIME '00:00:00.111'"},
+		{"select * from t where a > {ts '1989-09-10 11:11:11'}", true, "SELECT * FROM `t` WHERE `a`>TIMESTAMP '1989-09-10 11:11:11'"},
+		{"select * from t where a > {ts {abc '1989-09-10 11:11:11'}}", true, "SELECT * FROM `t` WHERE `a`>TIMESTAMP '1989-09-10 11:11:11'"},
 		// If the identifier is not in (t, d, ts), we just ignore it and consider the following expression as the value.
 		// See: https://dev.mysql.com/doc/refman/5.7/en/expressions.html
-		{"select {ts123 '1989-09-10 11:11:11'}", true, "SELECT '1989-09-10 11:11:11'"},
+		{"select {ts123 '1989-09-10 11:11:11'}", true, "SELECT _UTF8MB4'1989-09-10 11:11:11'"},
 		{"select {ts123 123}", true, "SELECT 123"},
 		{"select {ts123 1 xor 1}", true, "SELECT 1 XOR 1"},
+		{"select * from t where a > {ts123 '1989-09-10 11:11:11'}", true, "SELECT * FROM `t` WHERE `a`>_UTF8MB4'1989-09-10 11:11:11'"},
+		{"select .t.a from t", false, ""},
 	}
-	s.RunTest(c, table)
+
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestBuiltin(c *C) {
+func TestBuiltin(t *testing.T) {
 	table := []testCase{
 		// for builtin functions
 		{"SELECT POW(1, 2)", true, "SELECT POW(1, 2)"},
@@ -1245,9 +1432,9 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT ABS(10, 1);", true, "SELECT ABS(10, 1)"},
 		{"SELECT ABS(10);", true, "SELECT ABS(10)"},
 		{"SELECT ABS();", true, "SELECT ABS()"},
-		{"SELECT CONV(10+'10'+'10'+X'0a',10,10);", true, "SELECT CONV(10+'10'+'10'+x'0a', 10, 10)"},
+		{"SELECT CONV(10+'10'+'10'+X'0a',10,10);", true, "SELECT CONV(10+_UTF8MB4'10'+_UTF8MB4'10'+x'0a', 10, 10)"},
 		{"SELECT CONV();", true, "SELECT CONV()"},
-		{"SELECT CRC32('MySQL');", true, "SELECT CRC32('MySQL')"},
+		{"SELECT CRC32('MySQL');", true, "SELECT CRC32(_UTF8MB4'MySQL')"},
 		{"SELECT CRC32();", true, "SELECT CRC32()"},
 		{"SELECT SIGN();", true, "SELECT SIGN()"},
 		{"SELECT SIGN(0);", true, "SELECT SIGN(0)"},
@@ -1282,22 +1469,24 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT TRUNCATE(1.223,1);", true, "SELECT TRUNCATE(1.223, 1)"},
 		{"SELECT TRUNCATE();", true, "SELECT TRUNCATE()"},
 
-		{"SELECT SUBSTR('Quadratically',5);", true, "SELECT SUBSTR('Quadratically', 5)"},
-		{"SELECT SUBSTR('Quadratically',5, 3);", true, "SELECT SUBSTR('Quadratically', 5, 3)"},
-		{"SELECT SUBSTR('Quadratically' FROM 5);", true, "SELECT SUBSTR('Quadratically', 5)"},
-		{"SELECT SUBSTR('Quadratically' FROM 5 FOR 3);", true, "SELECT SUBSTR('Quadratically', 5, 3)"},
+		{"SELECT SUBSTR('Quadratically',5);", true, "SELECT SUBSTR(_UTF8MB4'Quadratically', 5)"},
+		{"SELECT SUBSTR('Quadratically',5, 3);", true, "SELECT SUBSTR(_UTF8MB4'Quadratically', 5, 3)"},
+		{"SELECT SUBSTR('Quadratically' FROM 5);", true, "SELECT SUBSTR(_UTF8MB4'Quadratically', 5)"},
+		{"SELECT SUBSTR('Quadratically' FROM 5 FOR 3);", true, "SELECT SUBSTR(_UTF8MB4'Quadratically', 5, 3)"},
 
-		{"SELECT SUBSTRING('Quadratically',5);", true, "SELECT SUBSTRING('Quadratically', 5)"},
-		{"SELECT SUBSTRING('Quadratically',5, 3);", true, "SELECT SUBSTRING('Quadratically', 5, 3)"},
-		{"SELECT SUBSTRING('Quadratically' FROM 5);", true, "SELECT SUBSTRING('Quadratically', 5)"},
-		{"SELECT SUBSTRING('Quadratically' FROM 5 FOR 3);", true, "SELECT SUBSTRING('Quadratically', 5, 3)"},
+		{"SELECT SUBSTRING('Quadratically',5);", true, "SELECT SUBSTRING(_UTF8MB4'Quadratically', 5)"},
+		{"SELECT SUBSTRING('Quadratically',5, 3);", true, "SELECT SUBSTRING(_UTF8MB4'Quadratically', 5, 3)"},
+		{"SELECT SUBSTRING('Quadratically' FROM 5);", true, "SELECT SUBSTRING(_UTF8MB4'Quadratically', 5)"},
+		{"SELECT SUBSTRING('Quadratically' FROM 5 FOR 3);", true, "SELECT SUBSTRING(_UTF8MB4'Quadratically', 5, 3)"},
 
-		{"SELECT CONVERT('111', SIGNED);", true, "SELECT CONVERT('111', SIGNED)"},
+		{"SELECT CONVERT('111', SIGNED);", true, "SELECT CONVERT(_UTF8MB4'111', SIGNED)"},
 
 		{"SELECT LEAST(), LEAST(1, 2, 3);", true, "SELECT LEAST(),LEAST(1, 2, 3)"},
 
 		{"SELECT INTERVAL(1, 0, 1, 2)", true, "SELECT INTERVAL(1, 0, 1, 2)"},
-		{"SELECT DATE_ADD('2008-01-02', INTERVAL INTERVAL(1, 0, 1) DAY);", true, "SELECT DATE_ADD('2008-01-02', INTERVAL INTERVAL(1, 0, 1) DAY)"},
+		{"SELECT (INTERVAL(1, 0, 1, 2)+5)*7+INTERVAL(1, 0, 1, 2)/2", true, "SELECT (INTERVAL(1, 0, 1, 2)+5)*7+INTERVAL(1, 0, 1, 2)/2"},
+		{"SELECT INTERVAL(0, (1*5)/2)+INTERVAL(5, 4, 3)", true, "SELECT INTERVAL(0, (1*5)/2)+INTERVAL(5, 4, 3)"},
+		{"SELECT DATE_ADD('2008-01-02', INTERVAL INTERVAL(1, 0, 1) DAY);", true, "SELECT DATE_ADD(_UTF8MB4'2008-01-02', INTERVAL INTERVAL(1, 0, 1) DAY)"},
 
 		// information functions
 		{"SELECT DATABASE();", true, "SELECT DATABASE()"},
@@ -1309,36 +1498,38 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT CURRENT_USER;", true, "SELECT CURRENT_USER()"},
 		{"SELECT CONNECTION_ID();", true, "SELECT CONNECTION_ID()"},
 		{"SELECT VERSION();", true, "SELECT VERSION()"},
-		{"SELECT BENCHMARK(1000000, AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3')));", true, "SELECT BENCHMARK(1000000, AES_ENCRYPT('text', UNHEX('F3229A0B371ED2D9441B830D21A390C3')))"},
-		{"SELECT BENCHMARK(AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3')));", true, "SELECT BENCHMARK(AES_ENCRYPT('text', UNHEX('F3229A0B371ED2D9441B830D21A390C3')))"},
-		{"SELECT CHARSET('abc');", true, "SELECT CHARSET('abc')"},
-		{"SELECT COERCIBILITY('abc');", true, "SELECT COERCIBILITY('abc')"},
-		{"SELECT COERCIBILITY('abc', 'a');", true, "SELECT COERCIBILITY('abc', 'a')"},
-		{"SELECT COLLATION('abc');", true, "SELECT COLLATION('abc')"},
+		{"SELECT BENCHMARK(1000000, AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3')));", true, "SELECT BENCHMARK(1000000, AES_ENCRYPT(_UTF8MB4'text', UNHEX(_UTF8MB4'F3229A0B371ED2D9441B830D21A390C3')))"},
+		{"SELECT BENCHMARK(AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3')));", true, "SELECT BENCHMARK(AES_ENCRYPT(_UTF8MB4'text', UNHEX(_UTF8MB4'F3229A0B371ED2D9441B830D21A390C3')))"},
+		{"SELECT CHARSET('abc');", true, "SELECT CHARSET(_UTF8MB4'abc')"},
+		{"SELECT COERCIBILITY('abc');", true, "SELECT COERCIBILITY(_UTF8MB4'abc')"},
+		{"SELECT COERCIBILITY('abc', 'a');", true, "SELECT COERCIBILITY(_UTF8MB4'abc', _UTF8MB4'a')"},
+		{"SELECT COLLATION('abc');", true, "SELECT COLLATION(_UTF8MB4'abc')"},
 		{"SELECT ROW_COUNT();", true, "SELECT ROW_COUNT()"},
 		{"SELECT SESSION_USER();", true, "SELECT SESSION_USER()"},
 		{"SELECT SYSTEM_USER();", true, "SELECT SYSTEM_USER()"},
 		{"SELECT FORMAT_BYTES(512);", true, "SELECT FORMAT_BYTES(512)"},
 		{"SELECT FORMAT_NANO_TIME(3501);", true, "SELECT FORMAT_NANO_TIME(3501)"},
 
-		{"SELECT SUBSTRING_INDEX('www.mysql.com', '.', 2);", true, "SELECT SUBSTRING_INDEX('www.mysql.com', '.', 2)"},
-		{"SELECT SUBSTRING_INDEX('www.mysql.com', '.', -2);", true, "SELECT SUBSTRING_INDEX('www.mysql.com', '.', -2)"},
+		{"SELECT SUBSTRING_INDEX('www.mysql.com', '.', 2);", true, "SELECT SUBSTRING_INDEX(_UTF8MB4'www.mysql.com', _UTF8MB4'.', 2)"},
+		{"SELECT SUBSTRING_INDEX('www.mysql.com', '.', -2);", true, "SELECT SUBSTRING_INDEX(_UTF8MB4'www.mysql.com', _UTF8MB4'.', -2)"},
 
-		{`SELECT ASCII(), ASCII(""), ASCII("A"), ASCII(1);`, true, "SELECT ASCII(),ASCII(''),ASCII('A'),ASCII(1)"},
+		{`SELECT ASCII(), ASCII(""), ASCII("A"), ASCII(1);`, true, "SELECT ASCII(),ASCII(_UTF8MB4''),ASCII(_UTF8MB4'A'),ASCII(1)"},
 
-		{`SELECT LOWER("A"), UPPER("a")`, true, "SELECT LOWER('A'),UPPER('a')"},
-		{`SELECT LCASE("A"), UCASE("a")`, true, "SELECT LCASE('A'),UCASE('a')"},
+		{`SELECT LOWER("A"), UPPER("a")`, true, "SELECT LOWER(_UTF8MB4'A'),UPPER(_UTF8MB4'a')"},
+		{`SELECT LCASE("A"), UCASE("a")`, true, "SELECT LCASE(_UTF8MB4'A'),UCASE(_UTF8MB4'a')"},
 
-		{`SELECT REPLACE('www.mysql.com', 'w', 'Ww')`, true, "SELECT REPLACE('www.mysql.com', 'w', 'Ww')"},
+		{`SELECT REPLACE('www.mysql.com', 'w', 'Ww')`, true, "SELECT REPLACE(_UTF8MB4'www.mysql.com', _UTF8MB4'w', _UTF8MB4'Ww')"},
 
-		{`SELECT LOCATE('bar', 'foobarbar');`, true, "SELECT LOCATE('bar', 'foobarbar')"},
-		{`SELECT LOCATE('bar', 'foobarbar', 5);`, true, "SELECT LOCATE('bar', 'foobarbar', 5)"},
+		{`SELECT LOCATE('bar', 'foobarbar');`, true, "SELECT LOCATE(_UTF8MB4'bar', _UTF8MB4'foobarbar')"},
+		{`SELECT LOCATE('bar', 'foobarbar', 5);`, true, "SELECT LOCATE(_UTF8MB4'bar', _UTF8MB4'foobarbar', 5)"},
 
 		{`SELECT tidb_version();`, true, "SELECT TIDB_VERSION()"},
 		{`SELECT tidb_is_ddl_owner();`, true, "SELECT TIDB_IS_DDL_OWNER()"},
 		{`SELECT tidb_decode_plan();`, true, "SELECT TIDB_DECODE_PLAN()"},
-		{`SELECT tidb_decode_key('abc');`, true, "SELECT TIDB_DECODE_KEY('abc')"},
-		{`SELECT get_mvcc_info('hex', '0xabc');`, true, "SELECT GET_MVCC_INFO('hex', '0xabc')"},
+		{`SELECT tidb_decode_key('abc');`, true, "SELECT TIDB_DECODE_KEY(_UTF8MB4'abc')"},
+		{`SELECT tidb_decode_base64_key('abc');`, true, "SELECT TIDB_DECODE_BASE64_KEY(_UTF8MB4'abc')"},
+		{`SELECT tidb_decode_sql_digests('[]');`, true, "SELECT TIDB_DECODE_SQL_DIGESTS(_UTF8MB4'[]')"},
+		{`SELECT get_mvcc_info('hex', '0xabc');`, true, "SELECT GET_MVCC_INFO(_UTF8MB4'hex', _UTF8MB4'0xabc')"},
 
 		// for time fsp
 		{"CREATE TABLE t( c1 TIME(2), c2 DATETIME(2), c3 TIMESTAMP(2) );", true, "CREATE TABLE `t` (`c1` TIME(2),`c2` DATETIME(2),`c3` TIMESTAMP(2))"},
@@ -1356,6 +1547,7 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT *, CAST(data AS CHAR CHARACTER SET utf8) FROM t;", true, "SELECT *,CAST(`data` AS CHAR CHARSET UTF8) FROM `t`"},
 		{"SELECT CAST(data AS CHARACTER);", true, "SELECT CAST(`data` AS CHAR)"},
 		{"SELECT CAST(data AS CHARACTER(10) CHARACTER SET utf8);", true, "SELECT CAST(`data` AS CHAR(10) CHARSET UTF8)"},
+		{"SELECT CAST(data AS BINARY)", true, "SELECT CAST(`data` AS BINARY)"},
 
 		// for cast as JSON
 		{"SELECT *, CAST(data AS JSON) FROM t;", true, "SELECT *,CAST(`data` AS JSON) FROM `t`"},
@@ -1374,15 +1566,16 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"select cast(1 as float(53));", true, "SELECT CAST(1 AS DOUBLE)"},
 		{"select cast(1 as float(54));", false, ""},
 
-		// for cast as real
 		{"select cast(1 as real);", true, "SELECT CAST(1 AS DOUBLE)"},
+		{"select cast('2000' as year);", true, "SELECT CAST(_UTF8MB4'2000' AS YEAR)"},
+		{"select cast(time '2000' as year);", true, "SELECT CAST(TIME '2000' AS YEAR)"},
 
 		// for last_insert_id
 		{"SELECT last_insert_id();", true, "SELECT LAST_INSERT_ID()"},
 		{"SELECT last_insert_id(1);", true, "SELECT LAST_INSERT_ID(1)"},
 
 		// for binary operator
-		{"SELECT binary 'a';", true, "SELECT BINARY 'a'"},
+		{"SELECT binary 'a';", true, "SELECT BINARY _UTF8MB4'a'"},
 
 		// for bit_count
 		{`SELECT BIT_COUNT(1);`, true, "SELECT BIT_COUNT(1)"},
@@ -1398,13 +1591,13 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"select now()", true, "SELECT NOW()"},
 		{"select now(6)", true, "SELECT NOW(6)"},
 		{"select sysdate(), sysdate(6)", true, "SELECT SYSDATE(),SYSDATE(6)"},
-		{"SELECT time('01:02:03');", true, "SELECT TIME('01:02:03')"},
-		{"SELECT time('01:02:03.1')", true, "SELECT TIME('01:02:03.1')"},
-		{"SELECT time('20.1')", true, "SELECT TIME('20.1')"},
-		{"SELECT TIMEDIFF('2000:01:01 00:00:00', '2000:01:01 00:00:00.000001');", true, "SELECT TIMEDIFF('2000:01:01 00:00:00', '2000:01:01 00:00:00.000001')"},
-		{"SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01');", true, "SELECT TIMESTAMPDIFF(MONTH, '2003-02-01', '2003-05-01')"},
-		{"SELECT TIMESTAMPDIFF(YEAR,'2002-05-01','2001-01-01');", true, "SELECT TIMESTAMPDIFF(YEAR, '2002-05-01', '2001-01-01')"},
-		{"SELECT TIMESTAMPDIFF(MINUTE,'2003-02-01','2003-05-01 12:05:55');", true, "SELECT TIMESTAMPDIFF(MINUTE, '2003-02-01', '2003-05-01 12:05:55')"},
+		{"SELECT time('01:02:03');", true, "SELECT TIME(_UTF8MB4'01:02:03')"},
+		{"SELECT time('01:02:03.1')", true, "SELECT TIME(_UTF8MB4'01:02:03.1')"},
+		{"SELECT time('20.1')", true, "SELECT TIME(_UTF8MB4'20.1')"},
+		{"SELECT TIMEDIFF('2000:01:01 00:00:00', '2000:01:01 00:00:00.000001');", true, "SELECT TIMEDIFF(_UTF8MB4'2000:01:01 00:00:00', _UTF8MB4'2000:01:01 00:00:00.000001')"},
+		{"SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01');", true, "SELECT TIMESTAMPDIFF(MONTH, _UTF8MB4'2003-02-01', _UTF8MB4'2003-05-01')"},
+		{"SELECT TIMESTAMPDIFF(YEAR,'2002-05-01','2001-01-01');", true, "SELECT TIMESTAMPDIFF(YEAR, _UTF8MB4'2002-05-01', _UTF8MB4'2001-01-01')"},
+		{"SELECT TIMESTAMPDIFF(MINUTE,'2003-02-01','2003-05-01 12:05:55');", true, "SELECT TIMESTAMPDIFF(MINUTE, _UTF8MB4'2003-02-01', _UTF8MB4'2003-05-01 12:05:55')"},
 
 		// select current_time
 		{"select current_time", true, "SELECT CURRENT_TIME()"},
@@ -1440,26 +1633,26 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"select utc_time(null)", false, ""},
 
 		// for microsecond, second, minute, hour
-		{"SELECT MICROSECOND('2009-12-31 23:59:59.000010');", true, "SELECT MICROSECOND('2009-12-31 23:59:59.000010')"},
-		{"SELECT SECOND('10:05:03');", true, "SELECT SECOND('10:05:03')"},
-		{"SELECT MINUTE('2008-02-03 10:05:03');", true, "SELECT MINUTE('2008-02-03 10:05:03')"},
-		{"SELECT HOUR(), HOUR('10:05:03');", true, "SELECT HOUR(),HOUR('10:05:03')"},
+		{"SELECT MICROSECOND('2009-12-31 23:59:59.000010');", true, "SELECT MICROSECOND(_UTF8MB4'2009-12-31 23:59:59.000010')"},
+		{"SELECT SECOND('10:05:03');", true, "SELECT SECOND(_UTF8MB4'10:05:03')"},
+		{"SELECT MINUTE('2008-02-03 10:05:03');", true, "SELECT MINUTE(_UTF8MB4'2008-02-03 10:05:03')"},
+		{"SELECT HOUR(), HOUR('10:05:03');", true, "SELECT HOUR(),HOUR(_UTF8MB4'10:05:03')"},
 
 		// for date, day, weekday
 		{"SELECT CURRENT_DATE, CURRENT_DATE(), CURDATE()", true, "SELECT CURRENT_DATE(),CURRENT_DATE(),CURDATE()"},
 		{"SELECT CURRENT_DATE, CURRENT_DATE(), CURDATE(1)", false, ""},
-		{"SELECT DATEDIFF('2003-12-31', '2003-12-30');", true, "SELECT DATEDIFF('2003-12-31', '2003-12-30')"},
-		{"SELECT DATE('2003-12-31 01:02:03');", true, "SELECT DATE('2003-12-31 01:02:03')"},
+		{"SELECT DATEDIFF('2003-12-31', '2003-12-30');", true, "SELECT DATEDIFF(_UTF8MB4'2003-12-31', _UTF8MB4'2003-12-30')"},
+		{"SELECT DATE('2003-12-31 01:02:03');", true, "SELECT DATE(_UTF8MB4'2003-12-31 01:02:03')"},
 		{"SELECT DATE();", true, "SELECT DATE()"},
-		{"SELECT DATE('2003-12-31 01:02:03', '');", true, "SELECT DATE('2003-12-31 01:02:03', '')"},
-		{`SELECT DATE_FORMAT('2003-12-31 01:02:03', '%W %M %Y');`, true, "SELECT DATE_FORMAT('2003-12-31 01:02:03', '%W %M %Y')"},
-		{"SELECT DAY('2007-02-03');", true, "SELECT DAY('2007-02-03')"},
-		{"SELECT DAYOFMONTH('2007-02-03');", true, "SELECT DAYOFMONTH('2007-02-03')"},
-		{"SELECT DAYOFWEEK('2007-02-03');", true, "SELECT DAYOFWEEK('2007-02-03')"},
-		{"SELECT DAYOFYEAR('2007-02-03');", true, "SELECT DAYOFYEAR('2007-02-03')"},
-		{"SELECT DAYNAME('2007-02-03');", true, "SELECT DAYNAME('2007-02-03')"},
+		{"SELECT DATE('2003-12-31 01:02:03', '');", true, "SELECT DATE(_UTF8MB4'2003-12-31 01:02:03', _UTF8MB4'')"},
+		{`SELECT DATE_FORMAT('2003-12-31 01:02:03', '%W %M %Y');`, true, "SELECT DATE_FORMAT(_UTF8MB4'2003-12-31 01:02:03', _UTF8MB4'%W %M %Y')"},
+		{"SELECT DAY('2007-02-03');", true, "SELECT DAY(_UTF8MB4'2007-02-03')"},
+		{"SELECT DAYOFMONTH('2007-02-03');", true, "SELECT DAYOFMONTH(_UTF8MB4'2007-02-03')"},
+		{"SELECT DAYOFWEEK('2007-02-03');", true, "SELECT DAYOFWEEK(_UTF8MB4'2007-02-03')"},
+		{"SELECT DAYOFYEAR('2007-02-03');", true, "SELECT DAYOFYEAR(_UTF8MB4'2007-02-03')"},
+		{"SELECT DAYNAME('2007-02-03');", true, "SELECT DAYNAME(_UTF8MB4'2007-02-03')"},
 		{"SELECT FROM_DAYS(1423);", true, "SELECT FROM_DAYS(1423)"},
-		{"SELECT WEEKDAY('2007-02-03');", true, "SELECT WEEKDAY('2007-02-03')"},
+		{"SELECT WEEKDAY('2007-02-03');", true, "SELECT WEEKDAY(_UTF8MB4'2007-02-03')"},
 
 		// for utc_date
 		{"SELECT UTC_DATE, UTC_DATE();", true, "SELECT UTC_DATE(),UTC_DATE()"},
@@ -1467,31 +1660,31 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 
 		// for week, month, year
 		{"SELECT WEEK();", true, "SELECT WEEK()"},
-		{"SELECT WEEK('2007-02-03');", true, "SELECT WEEK('2007-02-03')"},
-		{"SELECT WEEK('2007-02-03', 0);", true, "SELECT WEEK('2007-02-03', 0)"},
-		{"SELECT WEEKOFYEAR('2007-02-03');", true, "SELECT WEEKOFYEAR('2007-02-03')"},
-		{"SELECT MONTH('2007-02-03');", true, "SELECT MONTH('2007-02-03')"},
-		{"SELECT MONTHNAME('2007-02-03');", true, "SELECT MONTHNAME('2007-02-03')"},
-		{"SELECT YEAR('2007-02-03');", true, "SELECT YEAR('2007-02-03')"},
-		{"SELECT YEARWEEK('2007-02-03');", true, "SELECT YEARWEEK('2007-02-03')"},
-		{"SELECT YEARWEEK('2007-02-03', 0);", true, "SELECT YEARWEEK('2007-02-03', 0)"},
+		{"SELECT WEEK('2007-02-03');", true, "SELECT WEEK(_UTF8MB4'2007-02-03')"},
+		{"SELECT WEEK('2007-02-03', 0);", true, "SELECT WEEK(_UTF8MB4'2007-02-03', 0)"},
+		{"SELECT WEEKOFYEAR('2007-02-03');", true, "SELECT WEEKOFYEAR(_UTF8MB4'2007-02-03')"},
+		{"SELECT MONTH('2007-02-03');", true, "SELECT MONTH(_UTF8MB4'2007-02-03')"},
+		{"SELECT MONTHNAME('2007-02-03');", true, "SELECT MONTHNAME(_UTF8MB4'2007-02-03')"},
+		{"SELECT YEAR('2007-02-03');", true, "SELECT YEAR(_UTF8MB4'2007-02-03')"},
+		{"SELECT YEARWEEK('2007-02-03');", true, "SELECT YEARWEEK(_UTF8MB4'2007-02-03')"},
+		{"SELECT YEARWEEK('2007-02-03', 0);", true, "SELECT YEARWEEK(_UTF8MB4'2007-02-03', 0)"},
 
 		// for ADDTIME, SUBTIME
-		{"SELECT ADDTIME('01:00:00.999999', '02:00:00.999998');", true, "SELECT ADDTIME('01:00:00.999999', '02:00:00.999998')"},
-		{"SELECT ADDTIME('02:00:00.999998');", true, "SELECT ADDTIME('02:00:00.999998')"},
+		{"SELECT ADDTIME('01:00:00.999999', '02:00:00.999998');", true, "SELECT ADDTIME(_UTF8MB4'01:00:00.999999', _UTF8MB4'02:00:00.999998')"},
+		{"SELECT ADDTIME('02:00:00.999998');", true, "SELECT ADDTIME(_UTF8MB4'02:00:00.999998')"},
 		{"SELECT ADDTIME();", true, "SELECT ADDTIME()"},
-		{"SELECT SUBTIME('01:00:00.999999', '02:00:00.999998');", true, "SELECT SUBTIME('01:00:00.999999', '02:00:00.999998')"},
+		{"SELECT SUBTIME('01:00:00.999999', '02:00:00.999998');", true, "SELECT SUBTIME(_UTF8MB4'01:00:00.999999', _UTF8MB4'02:00:00.999998')"},
 
 		// for CONVERT_TZ
 		{"SELECT CONVERT_TZ();", true, "SELECT CONVERT_TZ()"},
-		{"SELECT CONVERT_TZ('2004-01-01 12:00:00','+00:00','+10:00');", true, "SELECT CONVERT_TZ('2004-01-01 12:00:00', '+00:00', '+10:00')"},
-		{"SELECT CONVERT_TZ('2004-01-01 12:00:00','+00:00','+10:00', '+10:00');", true, "SELECT CONVERT_TZ('2004-01-01 12:00:00', '+00:00', '+10:00', '+10:00')"},
+		{"SELECT CONVERT_TZ('2004-01-01 12:00:00','+00:00','+10:00');", true, "SELECT CONVERT_TZ(_UTF8MB4'2004-01-01 12:00:00', _UTF8MB4'+00:00', _UTF8MB4'+10:00')"},
+		{"SELECT CONVERT_TZ('2004-01-01 12:00:00','+00:00','+10:00', '+10:00');", true, "SELECT CONVERT_TZ(_UTF8MB4'2004-01-01 12:00:00', _UTF8MB4'+00:00', _UTF8MB4'+10:00', _UTF8MB4'+10:00')"},
 
 		// for GET_FORMAT
-		{"SELECT GET_FORMAT(DATE, 'USA');", true, "SELECT GET_FORMAT(DATE, 'USA')"},
-		{"SELECT GET_FORMAT(DATETIME, 'USA');", true, "SELECT GET_FORMAT(DATETIME, 'USA')"},
-		{"SELECT GET_FORMAT(TIME, 'USA');", true, "SELECT GET_FORMAT(TIME, 'USA')"},
-		{"SELECT GET_FORMAT(TIMESTAMP, 'USA');", true, "SELECT GET_FORMAT(DATETIME, 'USA')"},
+		{"SELECT GET_FORMAT(DATE, 'USA');", true, "SELECT GET_FORMAT(DATE, _UTF8MB4'USA')"},
+		{"SELECT GET_FORMAT(DATETIME, 'USA');", true, "SELECT GET_FORMAT(DATETIME, _UTF8MB4'USA')"},
+		{"SELECT GET_FORMAT(TIME, 'USA');", true, "SELECT GET_FORMAT(TIME, _UTF8MB4'USA')"},
+		{"SELECT GET_FORMAT(TIMESTAMP, 'USA');", true, "SELECT GET_FORMAT(DATETIME, _UTF8MB4'USA')"},
 
 		// for LOCALTIME, LOCALTIMESTAMP
 		{"SELECT LOCALTIME(), LOCALTIME(1)", true, "SELECT LOCALTIME(),LOCALTIME(1)"},
@@ -1508,131 +1701,135 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT PERIOD_DIFF(200802,200703)", true, "SELECT PERIOD_DIFF(200802, 200703)"},
 
 		// for QUARTER
-		{"SELECT QUARTER('2008-04-01');", true, "SELECT QUARTER('2008-04-01')"},
+		{"SELECT QUARTER('2008-04-01');", true, "SELECT QUARTER(_UTF8MB4'2008-04-01')"},
 
 		// for SEC_TO_TIME
 		{"SELECT SEC_TO_TIME(2378)", true, "SELECT SEC_TO_TIME(2378)"},
 
 		// for TIME_FORMAT
-		{`SELECT TIME_FORMAT('100:00:00', '%H %k %h %I %l')`, true, "SELECT TIME_FORMAT('100:00:00', '%H %k %h %I %l')"},
+		{`SELECT TIME_FORMAT('100:00:00', '%H %k %h %I %l')`, true, "SELECT TIME_FORMAT(_UTF8MB4'100:00:00', _UTF8MB4'%H %k %h %I %l')"},
 
 		// for TIME_TO_SEC
-		{"SELECT TIME_TO_SEC('22:23:00')", true, "SELECT TIME_TO_SEC('22:23:00')"},
+		{"SELECT TIME_TO_SEC('22:23:00')", true, "SELECT TIME_TO_SEC(_UTF8MB4'22:23:00')"},
 
 		// for TIMESTAMPADD
-		{"SELECT TIMESTAMPADD(WEEK,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(WEEK, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_SECOND,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(SECOND, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_MINUTE,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MINUTE, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_HOUR,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(HOUR, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_DAY,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(DAY, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_WEEK,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(WEEK, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_MONTH,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MONTH, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_QUARTER,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(QUARTER, 1, '2003-01-02')"},
-		{"SELECT TIMESTAMPADD(SQL_TSI_YEAR,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(YEAR, 1, '2003-01-02')"},
+		{"SELECT TIMESTAMPADD(WEEK,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(WEEK, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_SECOND,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(SECOND, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_MINUTE,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MINUTE, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_HOUR,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(HOUR, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_DAY,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(DAY, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_WEEK,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(WEEK, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_MONTH,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MONTH, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_QUARTER,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(QUARTER, 1, _UTF8MB4'2003-01-02')"},
+		{"SELECT TIMESTAMPADD(SQL_TSI_YEAR,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(YEAR, 1, _UTF8MB4'2003-01-02')"},
 		{"SELECT TIMESTAMPADD(SQL_TSI_MICROSECOND,1,'2003-01-02');", false, ""},
-		{"SELECT TIMESTAMPADD(MICROSECOND,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MICROSECOND, 1, '2003-01-02')"},
+		{"SELECT TIMESTAMPADD(MICROSECOND,1,'2003-01-02');", true, "SELECT TIMESTAMPADD(MICROSECOND, 1, _UTF8MB4'2003-01-02')"},
 
 		// for TO_DAYS, TO_SECONDS
-		{"SELECT TO_DAYS('2007-10-07')", true, "SELECT TO_DAYS('2007-10-07')"},
-		{"SELECT TO_SECONDS('2009-11-29')", true, "SELECT TO_SECONDS('2009-11-29')"},
+		{"SELECT TO_DAYS('2007-10-07')", true, "SELECT TO_DAYS(_UTF8MB4'2007-10-07')"},
+		{"SELECT TO_SECONDS('2009-11-29')", true, "SELECT TO_SECONDS(_UTF8MB4'2009-11-29')"},
 
 		// for LAST_DAY
-		{"SELECT LAST_DAY('2003-02-05');", true, "SELECT LAST_DAY('2003-02-05')"},
+		{"SELECT LAST_DAY('2003-02-05');", true, "SELECT LAST_DAY(_UTF8MB4'2003-02-05')"},
 
 		// for UTC_TIME
 		{"SELECT UTC_TIME(), UTC_TIME(1)", true, "SELECT UTC_TIME(),UTC_TIME(1)"},
 
 		// for time extract
-		{`select extract(microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MICROSECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(SECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(hour from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(day from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(week from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(WEEK FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(month from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MONTH FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(quarter from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(QUARTER FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(year from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(YEAR FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(second_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(SECOND_MICROSECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(minute_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE_MICROSECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(minute_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE_SECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(hour_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_MICROSECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(hour_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_SECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(hour_minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_MINUTE FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(day_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_MICROSECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(day_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_SECOND FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(day_minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_MINUTE FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(day_hour from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_HOUR FROM '2011-11-11 10:10:10.123456')"},
-		{`select extract(year_month from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(YEAR_MONTH FROM '2011-11-11 10:10:10.123456')"},
+		{`select extract(microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MICROSECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(SECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(hour from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(day from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(week from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(WEEK FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(month from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MONTH FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(quarter from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(QUARTER FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(year from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(YEAR FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(second_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(SECOND_MICROSECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(minute_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE_MICROSECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(minute_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(MINUTE_SECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(hour_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_MICROSECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(hour_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_SECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(hour_minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(HOUR_MINUTE FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(day_microsecond from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_MICROSECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(day_second from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_SECOND FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(day_minute from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_MINUTE FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(day_hour from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(DAY_HOUR FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
+		{`select extract(year_month from "2011-11-11 10:10:10.123456")`, true, "SELECT EXTRACT(YEAR_MONTH FROM _UTF8MB4'2011-11-11 10:10:10.123456')"},
 
 		// for from_unixtime
 		{`select from_unixtime(1447430881)`, true, "SELECT FROM_UNIXTIME(1447430881)"},
 		{`select from_unixtime(1447430881.123456)`, true, "SELECT FROM_UNIXTIME(1447430881.123456)"},
 		{`select from_unixtime(1447430881.1234567)`, true, "SELECT FROM_UNIXTIME(1447430881.1234567)"},
 		{`select from_unixtime(1447430881.9999999)`, true, "SELECT FROM_UNIXTIME(1447430881.9999999)"},
-		{`select from_unixtime(1447430881, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881, '%Y %D %M %h:%i:%s %x')"},
-		{`select from_unixtime(1447430881.123456, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881.123456, '%Y %D %M %h:%i:%s %x')"},
-		{`select from_unixtime(1447430881.1234567, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881.1234567, '%Y %D %M %h:%i:%s %x')"},
+		{`select from_unixtime(1447430881, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881, _UTF8MB4'%Y %D %M %h:%i:%s %x')"},
+		{`select from_unixtime(1447430881.123456, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881.123456, _UTF8MB4'%Y %D %M %h:%i:%s %x')"},
+		{`select from_unixtime(1447430881.1234567, "%Y %D %M %h:%i:%s %x")`, true, "SELECT FROM_UNIXTIME(1447430881.1234567, _UTF8MB4'%Y %D %M %h:%i:%s %x')"},
 
 		// for issue 224
-		{`SELECT CAST('test collated returns' AS CHAR CHARACTER SET utf8) COLLATE utf8_bin;`, true, "SELECT CAST('test collated returns' AS CHAR CHARSET UTF8) COLLATE utf8_bin"},
+		{`SELECT CAST('test collated returns' AS CHAR CHARACTER SET utf8) COLLATE utf8_bin;`, true, "SELECT CAST(_UTF8MB4'test collated returns' AS CHAR CHARSET UTF8) COLLATE utf8_bin"},
 
 		// for string functions
 		// trim
-		{`SELECT TRIM('  bar   ');`, true, "SELECT TRIM('  bar   ')"},
-		{`SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx');`, true, "SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx')"},
-		{`SELECT TRIM(BOTH 'x' FROM 'xxxbarxxx');`, true, "SELECT TRIM(BOTH 'x' FROM 'xxxbarxxx')"},
-		{`SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz');`, true, "SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz')"},
-		{`SELECT LTRIM(' foo ');`, true, "SELECT LTRIM(' foo ')"},
-		{`SELECT RTRIM(' bar ');`, true, "SELECT RTRIM(' bar ')"},
+		{`SELECT TRIM('  bar   ');`, true, "SELECT TRIM(_UTF8MB4'  bar   ')"},
+		{`SELECT TRIM(LEADING 'x' FROM 'xxxbarxxx');`, true, "SELECT TRIM(LEADING _UTF8MB4'x' FROM _UTF8MB4'xxxbarxxx')"},
+		{`SELECT TRIM(BOTH 'x' FROM 'xxxbarxxx');`, true, "SELECT TRIM(BOTH _UTF8MB4'x' FROM _UTF8MB4'xxxbarxxx')"},
+		{`SELECT TRIM(TRAILING 'xyz' FROM 'barxxyz');`, true, "SELECT TRIM(TRAILING _UTF8MB4'xyz' FROM _UTF8MB4'barxxyz')"},
+		{`SELECT LTRIM(' foo ');`, true, "SELECT LTRIM(_UTF8MB4' foo ')"},
+		{`SELECT RTRIM(' bar ');`, true, "SELECT RTRIM(_UTF8MB4' bar ')"},
 
-		{`SELECT RPAD('hi', 6, 'c');`, true, "SELECT RPAD('hi', 6, 'c')"},
-		{`SELECT BIT_LENGTH('hi');`, true, "SELECT BIT_LENGTH('hi')"},
+		{`SELECT RPAD('hi', 6, 'c');`, true, "SELECT RPAD(_UTF8MB4'hi', 6, _UTF8MB4'c')"},
+		{`SELECT BIT_LENGTH('hi');`, true, "SELECT BIT_LENGTH(_UTF8MB4'hi')"},
 		{`SELECT CHAR(65);`, true, "SELECT CHAR_FUNC(65, NULL)"},
-		{`SELECT CHAR_LENGTH('abc');`, true, "SELECT CHAR_LENGTH('abc')"},
-		{`SELECT CHARACTER_LENGTH('abc');`, true, "SELECT CHARACTER_LENGTH('abc')"},
-		{`SELECT FIELD('ej', 'Hej', 'ej', 'Heja', 'hej', 'foo');`, true, "SELECT FIELD('ej', 'Hej', 'ej', 'Heja', 'hej', 'foo')"},
-		{`SELECT FIND_IN_SET('foo', 'foo,bar')`, true, "SELECT FIND_IN_SET('foo', 'foo,bar')"},
-		{`SELECT FIND_IN_SET('foo')`, true, "SELECT FIND_IN_SET('foo')"}, // illegal number of argument still pass
-		{`SELECT MAKE_SET(1,'a'), MAKE_SET(1,'a','b','c')`, true, "SELECT MAKE_SET(1, 'a'),MAKE_SET(1, 'a', 'b', 'c')"},
-		{`SELECT MID('Sakila', -5, 3)`, true, "SELECT MID('Sakila', -5, 3)"},
+		{`SELECT CHAR_LENGTH('abc');`, true, "SELECT CHAR_LENGTH(_UTF8MB4'abc')"},
+		{`SELECT CHARACTER_LENGTH('abc');`, true, "SELECT CHARACTER_LENGTH(_UTF8MB4'abc')"},
+		{`SELECT FIELD('ej', 'Hej', 'ej', 'Heja', 'hej', 'foo');`, true, "SELECT FIELD(_UTF8MB4'ej', _UTF8MB4'Hej', _UTF8MB4'ej', _UTF8MB4'Heja', _UTF8MB4'hej', _UTF8MB4'foo')"},
+		{`SELECT FIND_IN_SET('foo', 'foo,bar')`, true, "SELECT FIND_IN_SET(_UTF8MB4'foo', _UTF8MB4'foo,bar')"},
+		{`SELECT FIND_IN_SET('foo')`, true, "SELECT FIND_IN_SET(_UTF8MB4'foo')"}, // illegal number of argument still pass
+		{`SELECT MAKE_SET(1,'a'), MAKE_SET(1,'a','b','c')`, true, "SELECT MAKE_SET(1, _UTF8MB4'a'),MAKE_SET(1, _UTF8MB4'a', _UTF8MB4'b', _UTF8MB4'c')"},
+		{`SELECT MID('Sakila', -5, 3)`, true, "SELECT MID(_UTF8MB4'Sakila', -5, 3)"},
 		{`SELECT OCT(12)`, true, "SELECT OCT(12)"},
-		{`SELECT OCTET_LENGTH('text')`, true, "SELECT OCTET_LENGTH('text')"},
-		{`SELECT ORD('2')`, true, "SELECT ORD('2')"},
-		{`SELECT POSITION('bar' IN 'foobarbar')`, true, "SELECT POSITION('bar' IN 'foobarbar')"},
-		{`SELECT QUOTE('Don\'t!')`, true, "SELECT QUOTE('Don''t!')"},
+		{`SELECT OCTET_LENGTH('text')`, true, "SELECT OCTET_LENGTH(_UTF8MB4'text')"},
+		{`SELECT ORD('2')`, true, "SELECT ORD(_UTF8MB4'2')"},
+		{`SELECT POSITION('bar' IN 'foobarbar')`, true, "SELECT POSITION(_UTF8MB4'bar' IN _UTF8MB4'foobarbar')"},
+		{`SELECT QUOTE('Don\'t!')`, true, "SELECT QUOTE(_UTF8MB4'Don''t!')"},
 		{`SELECT BIN(12)`, true, "SELECT BIN(12)"},
-		{`SELECT ELT(1, 'ej', 'Heja', 'hej', 'foo')`, true, "SELECT ELT(1, 'ej', 'Heja', 'hej', 'foo')"},
-		{`SELECT EXPORT_SET(5,'Y','N'), EXPORT_SET(5,'Y','N',','), EXPORT_SET(5,'Y','N',',',4)`, true, "SELECT EXPORT_SET(5, 'Y', 'N'),EXPORT_SET(5, 'Y', 'N', ','),EXPORT_SET(5, 'Y', 'N', ',', 4)"},
-		{`SELECT FORMAT(), FORMAT(12332.2,2,'de_DE'), FORMAT(12332.123456, 4)`, true, "SELECT FORMAT(),FORMAT(12332.2, 2, 'de_DE'),FORMAT(12332.123456, 4)"},
-		{`SELECT FROM_BASE64('abc')`, true, "SELECT FROM_BASE64('abc')"},
-		{`SELECT TO_BASE64('abc')`, true, "SELECT TO_BASE64('abc')"},
-		{`SELECT INSERT(), INSERT('Quadratic', 3, 4, 'What'), INSTR('foobarbar', 'bar')`, true, "SELECT INSERT_FUNC(),INSERT_FUNC('Quadratic', 3, 4, 'What'),INSTR('foobarbar', 'bar')"},
-		{`SELECT LOAD_FILE('/tmp/picture')`, true, "SELECT LOAD_FILE('/tmp/picture')"},
-		{`SELECT LPAD('hi',4,'??')`, true, "SELECT LPAD('hi', 4, '??')"},
-		{`SELECT LEFT("foobar", 3)`, true, "SELECT LEFT('foobar', 3)"},
-		{`SELECT RIGHT("foobar", 3)`, true, "SELECT RIGHT('foobar', 3)"},
+		{`SELECT ELT(1, 'ej', 'Heja', 'hej', 'foo')`, true, "SELECT ELT(1, _UTF8MB4'ej', _UTF8MB4'Heja', _UTF8MB4'hej', _UTF8MB4'foo')"},
+		{`SELECT EXPORT_SET(5,'Y','N'), EXPORT_SET(5,'Y','N',','), EXPORT_SET(5,'Y','N',',',4)`, true, "SELECT EXPORT_SET(5, _UTF8MB4'Y', _UTF8MB4'N'),EXPORT_SET(5, _UTF8MB4'Y', _UTF8MB4'N', _UTF8MB4','),EXPORT_SET(5, _UTF8MB4'Y', _UTF8MB4'N', _UTF8MB4',', 4)"},
+		{`SELECT FORMAT(), FORMAT(12332.2,2,'de_DE'), FORMAT(12332.123456, 4)`, true, "SELECT FORMAT(),FORMAT(12332.2, 2, _UTF8MB4'de_DE'),FORMAT(12332.123456, 4)"},
+		{`SELECT FROM_BASE64('abc')`, true, "SELECT FROM_BASE64(_UTF8MB4'abc')"},
+		{`SELECT TO_BASE64('abc')`, true, "SELECT TO_BASE64(_UTF8MB4'abc')"},
+		{`SELECT INSERT(), INSERT('Quadratic', 3, 4, 'What'), INSTR('foobarbar', 'bar')`, true, "SELECT INSERT_FUNC(),INSERT_FUNC(_UTF8MB4'Quadratic', 3, 4, _UTF8MB4'What'),INSTR(_UTF8MB4'foobarbar', _UTF8MB4'bar')"},
+		{`SELECT LOAD_FILE('/tmp/picture')`, true, "SELECT LOAD_FILE(_UTF8MB4'/tmp/picture')"},
+		{`SELECT LPAD('hi',4,'??')`, true, "SELECT LPAD(_UTF8MB4'hi', 4, _UTF8MB4'??')"},
+		{`SELECT LEFT("foobar", 3)`, true, "SELECT LEFT(_UTF8MB4'foobar', 3)"},
+		{`SELECT RIGHT("foobar", 3)`, true, "SELECT RIGHT(_UTF8MB4'foobar', 3)"},
 
 		// repeat
-		{`SELECT REPEAT("a", 10);`, true, "SELECT REPEAT('a', 10)"},
+		{`SELECT REPEAT("a", 10);`, true, "SELECT REPEAT(_UTF8MB4'a', 10)"},
 
 		// for miscellaneous functions
 		{`SELECT SLEEP(10);`, true, "SELECT SLEEP(10)"},
 		{`SELECT ANY_VALUE(@arg);`, true, "SELECT ANY_VALUE(@`arg`)"},
-		{`SELECT INET_ATON('10.0.5.9');`, true, "SELECT INET_ATON('10.0.5.9')"},
+		{`SELECT INET_ATON('10.0.5.9');`, true, "SELECT INET_ATON(_UTF8MB4'10.0.5.9')"},
 		{`SELECT INET_NTOA(167773449);`, true, "SELECT INET_NTOA(167773449)"},
-		{`SELECT INET6_ATON('fdfe::5a55:caff:fefa:9089');`, true, "SELECT INET6_ATON('fdfe::5a55:caff:fefa:9089')"},
+		{`SELECT INET6_ATON('fdfe::5a55:caff:fefa:9089');`, true, "SELECT INET6_ATON(_UTF8MB4'fdfe::5a55:caff:fefa:9089')"},
 		{`SELECT INET6_NTOA(INET_NTOA(167773449));`, true, "SELECT INET6_NTOA(INET_NTOA(167773449))"},
 		{`SELECT IS_FREE_LOCK(@str);`, true, "SELECT IS_FREE_LOCK(@`str`)"},
-		{`SELECT IS_IPV4('10.0.5.9');`, true, "SELECT IS_IPV4('10.0.5.9')"},
-		{`SELECT IS_IPV4_COMPAT(INET6_ATON('::10.0.5.9'));`, true, "SELECT IS_IPV4_COMPAT(INET6_ATON('::10.0.5.9'))"},
-		{`SELECT IS_IPV4_MAPPED(INET6_ATON('::10.0.5.9'));`, true, "SELECT IS_IPV4_MAPPED(INET6_ATON('::10.0.5.9'))"},
-		{`SELECT IS_IPV6('10.0.5.9');`, true, "SELECT IS_IPV6('10.0.5.9')"},
+		{`SELECT IS_IPV4('10.0.5.9');`, true, "SELECT IS_IPV4(_UTF8MB4'10.0.5.9')"},
+		{`SELECT IS_IPV4_COMPAT(INET6_ATON('::10.0.5.9'));`, true, "SELECT IS_IPV4_COMPAT(INET6_ATON(_UTF8MB4'::10.0.5.9'))"},
+		{`SELECT IS_IPV4_MAPPED(INET6_ATON('::10.0.5.9'));`, true, "SELECT IS_IPV4_MAPPED(INET6_ATON(_UTF8MB4'::10.0.5.9'))"},
+		{`SELECT IS_IPV6('10.0.5.9');`, true, "SELECT IS_IPV6(_UTF8MB4'10.0.5.9')"},
 		{`SELECT IS_USED_LOCK(@str);`, true, "SELECT IS_USED_LOCK(@`str`)"},
 		{`SELECT MASTER_POS_WAIT(@log_name, @log_pos), MASTER_POS_WAIT(@log_name, @log_pos, @timeout), MASTER_POS_WAIT(@log_name, @log_pos, @timeout, @channel_name);`, true, "SELECT MASTER_POS_WAIT(@`log_name`, @`log_pos`),MASTER_POS_WAIT(@`log_name`, @`log_pos`, @`timeout`),MASTER_POS_WAIT(@`log_name`, @`log_pos`, @`timeout`, @`channel_name`)"},
-		{`SELECT NAME_CONST('myname', 14);`, true, "SELECT NAME_CONST('myname', 14)"},
+		{`SELECT NAME_CONST('myname', 14);`, true, "SELECT NAME_CONST(_UTF8MB4'myname', 14)"},
 		{`SELECT RELEASE_ALL_LOCKS();`, true, "SELECT RELEASE_ALL_LOCKS()"},
 		{`SELECT UUID();`, true, "SELECT UUID()"},
 		{`SELECT UUID_SHORT()`, true, "SELECT UUID_SHORT()"},
+		{`SELECT UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db')`, true, "SELECT UUID_TO_BIN(_UTF8MB4'6ccd780c-baba-1026-9564-5b8c656024db')"},
+		{`SELECT UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db', 1)`, true, "SELECT UUID_TO_BIN(_UTF8MB4'6ccd780c-baba-1026-9564-5b8c656024db', 1)"},
+		{`SELECT BIN_TO_UUID(0x6ccd780cbaba102695645b8c656024db)`, true, "SELECT BIN_TO_UUID(x'6ccd780cbaba102695645b8c656024db')"},
+		{`SELECT BIN_TO_UUID(0x6ccd780cbaba102695645b8c656024db, 1)`, true, "SELECT BIN_TO_UUID(x'6ccd780cbaba102695645b8c656024db', 1)"},
 		// test illegal arguments
 		{`SELECT SLEEP();`, true, "SELECT SLEEP()"},
 		{`SELECT ANY_VALUE();`, true, "SELECT ANY_VALUE()"},
@@ -1652,132 +1849,132 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`SELECT UUID(1);`, true, "SELECT UUID(1)"},
 		{`SELECT UUID_SHORT(1)`, true, "SELECT UUID_SHORT(1)"},
 		// interval
-		{`select "2011-11-11 10:10:10.123456" + interval 10 second`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select "2011-11-11 10:10:10.123456" - interval 10 second`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select "2011-11-11 10:10:10.123456" + interval 10 second`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select "2011-11-11 10:10:10.123456" - interval 10 second`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
 		// for date_add
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10.10' SECOND_MICROSECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10:10.10' MINUTE_MICROSECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10:10' MINUTE_SECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10:10:10.10' HOUR_MICROSECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10:10:10' HOUR_SECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '10:10' HOUR_MINUTE)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10.10' DAY_MICROSECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10' DAY_SECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '11 10:10' DAY_MINUTE)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '11 10' DAY_HOUR)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL '11-11' YEAR_MONTH)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10.10' SECOND_MICROSECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10.10' MINUTE_MICROSECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' MINUTE_SECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10.10' HOUR_MICROSECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10' HOUR_SECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' HOUR_MINUTE)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10.10' DAY_MICROSECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10' DAY_SECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10' DAY_MINUTE)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10' DAY_HOUR)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11-11' YEAR_MONTH)"},
 		{`select date_add("2011-11-11 10:10:10.123456", 10)`, false, ""},
 		{`select date_add("2011-11-11 10:10:10.123456", 0.10)`, false, ""},
 		{`select date_add("2011-11-11 10:10:10.123456", "11,11")`, false, ""},
 
 		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_microsecond)`, false, ""},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_second)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_minute)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_hour)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_day)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_week)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_month)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_quarter)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
-		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_year)`, true, "SELECT DATE_ADD('2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_second)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_minute)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_hour)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 10 sql_tsi_day)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_week)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_month)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_quarter)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
+		{`select date_add("2011-11-11 10:10:10.123456", interval 1 sql_tsi_year)`, true, "SELECT DATE_ADD(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
 
 		// for strcmp
-		{`select strcmp('abc', 'def')`, true, "SELECT STRCMP('abc', 'def')"},
+		{`select strcmp('abc', 'def')`, true, "SELECT STRCMP(_UTF8MB4'abc', _UTF8MB4'def')"},
 
 		// for adddate
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10.10' SECOND_MICROSECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10.10' MINUTE_MICROSECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10' MINUTE_SECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10:10.10' HOUR_MICROSECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10:10' HOUR_SECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10' HOUR_MINUTE)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10.10' DAY_MICROSECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10' DAY_SECOND)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10' DAY_MINUTE)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10' DAY_HOUR)"},
-		{`select adddate("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11-11' YEAR_MONTH)"},
-		{`select adddate("2011-11-11 10:10:10.123456", 10)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select adddate("2011-11-11 10:10:10.123456", 0.10)`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL 0.10 DAY)"},
-		{`select adddate("2011-11-11 10:10:10.123456", "11,11")`, true, "SELECT ADDDATE('2011-11-11 10:10:10.123456', INTERVAL '11,11' DAY)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10.10' SECOND_MICROSECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10.10' MINUTE_MICROSECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' MINUTE_SECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10.10' HOUR_MICROSECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10' HOUR_SECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' HOUR_MINUTE)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10.10' DAY_MICROSECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10' DAY_SECOND)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10' DAY_MINUTE)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10' DAY_HOUR)"},
+		{`select adddate("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11-11' YEAR_MONTH)"},
+		{`select adddate("2011-11-11 10:10:10.123456", 10)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select adddate("2011-11-11 10:10:10.123456", 0.10)`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 0.10 DAY)"},
+		{`select adddate("2011-11-11 10:10:10.123456", "11,11")`, true, "SELECT ADDDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11,11' DAY)"},
 
 		// for date_sub
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10.10' SECOND_MICROSECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10:10.10' MINUTE_MICROSECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10:10' MINUTE_SECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10:10:10.10' HOUR_MICROSECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10:10:10' HOUR_SECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '10:10' HOUR_MINUTE)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10.10' DAY_MICROSECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10' DAY_SECOND)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '11 10:10' DAY_MINUTE)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '11 10' DAY_HOUR)"},
-		{`select date_sub("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT DATE_SUB('2011-11-11 10:10:10.123456', INTERVAL '11-11' YEAR_MONTH)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10.10' SECOND_MICROSECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10.10' MINUTE_MICROSECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' MINUTE_SECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10.10' HOUR_MICROSECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10' HOUR_SECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' HOUR_MINUTE)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10.10' DAY_MICROSECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10' DAY_SECOND)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10' DAY_MINUTE)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10' DAY_HOUR)"},
+		{`select date_sub("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT DATE_SUB(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11-11' YEAR_MONTH)"},
 		{`select date_sub("2011-11-11 10:10:10.123456", 10)`, false, ""},
 		{`select date_sub("2011-11-11 10:10:10.123456", 0.10)`, false, ""},
 		{`select date_sub("2011-11-11 10:10:10.123456", "11,11")`, false, ""},
 
 		// for subdate
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10.10' SECOND_MICROSECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10.10' MINUTE_MICROSECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10' MINUTE_SECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10:10.10' HOUR_MICROSECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10:10' HOUR_SECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '10:10' HOUR_MINUTE)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10.10' DAY_MICROSECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10:10' DAY_SECOND)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10:10' DAY_MINUTE)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11 10' DAY_HOUR)"},
-		{`select subdate("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11-11' YEAR_MONTH)"},
-		{`select subdate("2011-11-11 10:10:10.123456", 10)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
-		{`select subdate("2011-11-11 10:10:10.123456", 0.10)`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL 0.10 DAY)"},
-		{`select subdate("2011-11-11 10:10:10.123456", "11,11")`, true, "SELECT SUBDATE('2011-11-11 10:10:10.123456', INTERVAL '11,11' DAY)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10 microsecond)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MICROSECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10 second)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 SECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10 minute)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 MINUTE)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10 hour)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 HOUR)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10 day)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 1 week)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 WEEK)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 1 month)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 MONTH)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 1 quarter)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 QUARTER)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 1 year)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 1 YEAR)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10.10" second_microsecond)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10.10' SECOND_MICROSECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10.10" minute_microsecond)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10.10' MINUTE_MICROSECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10" minute_second)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' MINUTE_SECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10:10.10" hour_microsecond)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10.10' HOUR_MICROSECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10:10" hour_second)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10:10' HOUR_SECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "10:10" hour_minute)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'10:10' HOUR_MINUTE)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval 10.10 hour_minute)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10.10 HOUR_MINUTE)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10:10.10" day_microsecond)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10.10' DAY_MICROSECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10:10" day_second)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10:10' DAY_SECOND)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10:10" day_minute)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10:10' DAY_MINUTE)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "11 10" day_hour)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11 10' DAY_HOUR)"},
+		{`select subdate("2011-11-11 10:10:10.123456", interval "11-11" year_month)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11-11' YEAR_MONTH)"},
+		{`select subdate("2011-11-11 10:10:10.123456", 10)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 10 DAY)"},
+		{`select subdate("2011-11-11 10:10:10.123456", 0.10)`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL 0.10 DAY)"},
+		{`select subdate("2011-11-11 10:10:10.123456", "11,11")`, true, "SELECT SUBDATE(_UTF8MB4'2011-11-11 10:10:10.123456', INTERVAL _UTF8MB4'11,11' DAY)"},
 
 		// for unix_timestamp
 		{`select unix_timestamp()`, true, "SELECT UNIX_TIMESTAMP()"},
-		{`select unix_timestamp('2015-11-13 10:20:19.012')`, true, "SELECT UNIX_TIMESTAMP('2015-11-13 10:20:19.012')"},
+		{`select unix_timestamp('2015-11-13 10:20:19.012')`, true, "SELECT UNIX_TIMESTAMP(_UTF8MB4'2015-11-13 10:20:19.012')"},
 
 		// for misc functions
-		{`SELECT GET_LOCK('lock1',10);`, true, "SELECT GET_LOCK('lock1', 10)"},
-		{`SELECT RELEASE_LOCK('lock1');`, true, "SELECT RELEASE_LOCK('lock1')"},
+		{`SELECT GET_LOCK('lock1',10);`, true, "SELECT GET_LOCK(_UTF8MB4'lock1', 10)"},
+		{`SELECT RELEASE_LOCK('lock1');`, true, "SELECT RELEASE_LOCK(_UTF8MB4'lock1')"},
 
 		// for aggregate functions
 		{`select avg(), avg(c1,c2) from t;`, false, "SELECT AVG(),AVG(`c1`, `c2`) FROM `t`"},
@@ -1843,14 +2040,17 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select approx_count_distinct(c1) from t;`, true, "SELECT APPROX_COUNT_DISTINCT(`c1`) FROM `t`"},
 		{`select approx_count_distinct(c1, c2) from t;`, true, "SELECT APPROX_COUNT_DISTINCT(`c1`, `c2`) FROM `t`"},
 		{`select approx_count_distinct(c1, 123) from t;`, true, "SELECT APPROX_COUNT_DISTINCT(`c1`, 123) FROM `t`"},
+		{`select approx_percentile(c1) from t;`, true, "SELECT APPROX_PERCENTILE(`c1`) FROM `t`"},
+		{`select approx_percentile(c1, c2) from t;`, true, "SELECT APPROX_PERCENTILE(`c1`, `c2`) FROM `t`"},
+		{`select approx_percentile(c1, 123) from t;`, true, "SELECT APPROX_PERCENTILE(`c1`, 123) FROM `t`"},
 		{`select group_concat(c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(`c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
 		{`select group_concat(c2,c1 SEPARATOR ';') from t group by c1;`, true, "SELECT GROUP_CONCAT(`c2`, `c1` SEPARATOR ';') FROM `t` GROUP BY `c1`"},
 		{`select group_concat(distinct c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(DISTINCT `c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
 		{`select group_concat(distinctrow c2,c1) from t group by c1;`, true, "SELECT GROUP_CONCAT(DISTINCT `c2`, `c1` SEPARATOR ',') FROM `t` GROUP BY `c1`"},
 		{`SELECT student_name, GROUP_CONCAT(DISTINCT test_score ORDER BY test_score DESC SEPARATOR ' ') FROM student GROUP BY student_name;`, true, "SELECT `student_name`,GROUP_CONCAT(DISTINCT `test_score` ORDER BY `test_score` DESC SEPARATOR ' ') FROM `student` GROUP BY `student_name`"},
-		{`select std(c1), std(all c1), std(distinct c1) from t`, true, "SELECT STD(`c1`),STD(`c1`),STD(DISTINCT `c1`) FROM `t`"},
+		{`select std(c1), std(all c1), std(distinct c1) from t`, true, "SELECT STDDEV_POP(`c1`),STDDEV_POP(`c1`),STDDEV_POP(DISTINCT `c1`) FROM `t`"},
 		{`select std(c1, c2) from t`, false, ""},
-		{`select stddev(c1), stddev(all c1), stddev(distinct c1) from t`, true, "SELECT STDDEV(`c1`),STDDEV(`c1`),STDDEV(DISTINCT `c1`) FROM `t`"},
+		{`select stddev(c1), stddev(all c1), stddev(distinct c1) from t`, true, "SELECT STDDEV_POP(`c1`),STDDEV_POP(`c1`),STDDEV_POP(DISTINCT `c1`) FROM `t`"},
 		{`select stddev(c1, c2) from t`, false, ""},
 		{`select stddev_pop(c1), stddev_pop(all c1), stddev_pop(distinct c1) from t`, true, "SELECT STDDEV_POP(`c1`),STDDEV_POP(`c1`),STDDEV_POP(DISTINCT `c1`) FROM `t`"},
 		{`select stddev_pop(c1, c2) from t`, false, ""},
@@ -1862,6 +2062,10 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select var_pop(c1, c2) from t`, false, ""},
 		{`select var_samp(c1), var_samp(all c1), var_samp(distinct c1) from t`, true, "SELECT VAR_SAMP(`c1`),VAR_SAMP(`c1`),VAR_SAMP(DISTINCT `c1`) FROM `t`"},
 		{`select var_samp(c1, c2) from t`, false, ""},
+		{`select json_arrayagg(c2) from t group by c1`, true, "SELECT JSON_ARRAYAGG(`c2`) FROM `t` GROUP BY `c1`"},
+		{`select json_arrayagg(c1, c2) from t group by c1`, false, ""},
+		{`select json_arrayagg(distinct c2) from t group by c1`, false, "SELECT JSON_ARRAYAGG(DISTINCT `c2`) FROM `t` GROUP BY `c1`"},
+		{`select json_arrayagg(all c2) from t group by c1`, true, "SELECT JSON_ARRAYAGG(`c2`) FROM `t` GROUP BY `c1`"},
 		{`select json_objectagg(c1, c2) from t group by c1`, true, "SELECT JSON_OBJECTAGG(`c1`, `c2`) FROM `t` GROUP BY `c1`"},
 		{`select json_objectagg(c1, c2, c3) from t group by c1`, false, ""},
 		{`select json_objectagg(distinct c1, c2) from t group by c1`, false, "SELECT JSON_OBJECTAGG(DISTINCT `c1`, `c2`) FROM `t` GROUP BY `c1`"},
@@ -1872,35 +2076,35 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{`select json_objectagg(all c1, all c2) from t group by c1`, true, "SELECT JSON_OBJECTAGG(`c1`, `c2`) FROM `t` GROUP BY `c1`"},
 
 		// for encryption and compression functions
-		{`select AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3'))`, true, "SELECT AES_ENCRYPT('text', UNHEX('F3229A0B371ED2D9441B830D21A390C3'))"},
+		{`select AES_ENCRYPT('text',UNHEX('F3229A0B371ED2D9441B830D21A390C3'))`, true, "SELECT AES_ENCRYPT(_UTF8MB4'text', UNHEX(_UTF8MB4'F3229A0B371ED2D9441B830D21A390C3'))"},
 		{`select AES_DECRYPT(@crypt_str,@key_str)`, true, "SELECT AES_DECRYPT(@`crypt_str`, @`key_str`)"},
 		{`select AES_DECRYPT(@crypt_str,@key_str,@init_vector);`, true, "SELECT AES_DECRYPT(@`crypt_str`, @`key_str`, @`init_vector`)"},
-		{`SELECT COMPRESS('');`, true, "SELECT COMPRESS('')"},
+		{`SELECT COMPRESS('');`, true, "SELECT COMPRESS(_UTF8MB4'')"},
 		{`SELECT DECODE(@crypt_str, @pass_str);`, true, "SELECT DECODE(@`crypt_str`, @`pass_str`)"},
 		{`SELECT DES_DECRYPT(@crypt_str), DES_DECRYPT(@crypt_str, @key_str);`, true, "SELECT DES_DECRYPT(@`crypt_str`),DES_DECRYPT(@`crypt_str`, @`key_str`)"},
 		{`SELECT DES_ENCRYPT(@str), DES_ENCRYPT(@key_num);`, true, "SELECT DES_ENCRYPT(@`str`),DES_ENCRYPT(@`key_num`)"},
-		{`SELECT ENCODE('cleartext', CONCAT('my_random_salt','my_secret_password'));`, true, "SELECT ENCODE('cleartext', CONCAT('my_random_salt', 'my_secret_password'))"},
-		{`SELECT ENCRYPT('hello'), ENCRYPT('hello', @salt);`, true, "SELECT ENCRYPT('hello'),ENCRYPT('hello', @`salt`)"},
-		{`SELECT MD5('testing');`, true, "SELECT MD5('testing')"},
+		{`SELECT ENCODE('cleartext', CONCAT('my_random_salt','my_secret_password'));`, true, "SELECT ENCODE(_UTF8MB4'cleartext', CONCAT(_UTF8MB4'my_random_salt', _UTF8MB4'my_secret_password'))"},
+		{`SELECT ENCRYPT('hello'), ENCRYPT('hello', @salt);`, true, "SELECT ENCRYPT(_UTF8MB4'hello'),ENCRYPT(_UTF8MB4'hello', @`salt`)"},
+		{`SELECT MD5('testing');`, true, "SELECT MD5(_UTF8MB4'testing')"},
 		{`SELECT OLD_PASSWORD(@str);`, true, "SELECT OLD_PASSWORD(@`str`)"},
 		{`SELECT PASSWORD(@str);`, true, "SELECT PASSWORD_FUNC(@`str`)"},
 		{`SELECT RANDOM_BYTES(@len);`, true, "SELECT RANDOM_BYTES(@`len`)"},
-		{`SELECT SHA1('abc');`, true, "SELECT SHA1('abc')"},
-		{`SELECT SHA('abc');`, true, "SELECT SHA('abc')"},
-		{`SELECT SHA2('abc', 224);`, true, "SELECT SHA2('abc', 224)"},
-		{`SELECT UNCOMPRESS('any string');`, true, "SELECT UNCOMPRESS('any string')"},
+		{`SELECT SHA1('abc');`, true, "SELECT SHA1(_UTF8MB4'abc')"},
+		{`SELECT SHA('abc');`, true, "SELECT SHA(_UTF8MB4'abc')"},
+		{`SELECT SHA2('abc', 224);`, true, "SELECT SHA2(_UTF8MB4'abc', 224)"},
+		{`SELECT UNCOMPRESS('any string');`, true, "SELECT UNCOMPRESS(_UTF8MB4'any string')"},
 		{`SELECT UNCOMPRESSED_LENGTH(@compressed_string);`, true, "SELECT UNCOMPRESSED_LENGTH(@`compressed_string`)"},
 		{`SELECT VALIDATE_PASSWORD_STRENGTH(@str);`, true, "SELECT VALIDATE_PASSWORD_STRENGTH(@`str`)"},
 
 		// For JSON functions.
 		{`SELECT JSON_EXTRACT();`, true, "SELECT JSON_EXTRACT()"},
 		{`SELECT JSON_UNQUOTE();`, true, "SELECT JSON_UNQUOTE()"},
-		{`SELECT JSON_TYPE('[123]');`, true, "SELECT JSON_TYPE('[123]')"},
+		{`SELECT JSON_TYPE('[123]');`, true, "SELECT JSON_TYPE(_UTF8MB4'[123]')"},
 		{`SELECT JSON_TYPE();`, true, "SELECT JSON_TYPE()"},
 
 		// For two json grammar sugar.
-		{`SELECT a->'$.a' FROM t`, true, "SELECT JSON_EXTRACT(`a`, '$.a') FROM `t`"},
-		{`SELECT a->>'$.a' FROM t`, true, "SELECT JSON_UNQUOTE(JSON_EXTRACT(`a`, '$.a')) FROM `t`"},
+		{`SELECT a->'$.a' FROM t`, true, "SELECT JSON_EXTRACT(`a`, _UTF8MB4'$.a') FROM `t`"},
+		{`SELECT a->>'$.a' FROM t`, true, "SELECT JSON_UNQUOTE(JSON_EXTRACT(`a`, _UTF8MB4'$.a')) FROM `t`"},
 		{`SELECT '{}'->'$.a' FROM t`, false, ""},
 		{`SELECT '{}'->>'$.a' FROM t`, false, ""},
 		{`SELECT a->3 FROM t`, false, ""},
@@ -1917,7 +2121,7 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"select next value for sequence", true, "SELECT NEXTVAL(`sequence`)"},
 		{"select NeXt vAluE for seQuEncE2", true, "SELECT NEXTVAL(`seQuEncE2`)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
 	// Test in REAL_AS_FLOAT SQL mode.
 	table2 := []testCase{
@@ -1932,10 +2136,10 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		// for cast as real
 		{"select cast(1 as real);", true, "SELECT CAST(1 AS FLOAT)"},
 	}
-	s.RunTestInRealAsFloatMode(c, table2)
+	RunTestInRealAsFloatMode(t, table2, false)
 }
 
-func (s *testParserSuite) TestIdentifier(c *C) {
+func TestIdentifier(t *testing.T) {
 	table := []testCase{
 		// for quote identifier
 		{"select `a`, `a.b`, `a b` from t", true, "SELECT `a`,`a.b`,`a b` FROM `t`"},
@@ -1948,6 +2152,7 @@ func (s *testParserSuite) TestIdentifier(c *C) {
 		{`select * from t as "a"`, false, ""},
 		{`select * from t a`, true, "SELECT * FROM `t` AS `a`"},
 		// reserved keyword can't be used as identifier directly, but A.B pattern is an exception
+		{`select * from ROW`, false, ""},
 		{`select COUNT from DESC`, false, ""},
 		{`select COUNT from SELECT.DESC`, true, "SELECT `COUNT` FROM `SELECT`.`DESC`"},
 		{"use `select`", true, "USE `select`"},
@@ -1981,15 +2186,121 @@ func (s *testParserSuite) TestIdentifier(c *C) {
 		{`select .78 , 123`, true, "SELECT 0.78,123"},
 		{`select .78.123`, false, ""},
 		{`select .78#123`, true, "SELECT 0.78"},
-		{`insert float_test values(.67, 'string');`, true, "INSERT INTO `float_test` VALUES (0.67,'string')"},
+		{`insert float_test values(.67, 'string');`, true, "INSERT INTO `float_test` VALUES (0.67,_UTF8MB4'string')"},
 		{`select .78'123'`, true, "SELECT 0.78 AS `123`"},
 		{"select .78`123`", true, "SELECT 0.78 AS `123`"},
 		{`select .78"123"`, true, "SELECT 0.78 AS `123`"},
+		{"select 111 as \xd6\xf7", true, "SELECT 111 AS `??`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestDDL(c *C) {
+func TestBuiltinFuncAsIdentifier(t *testing.T) {
+	whitespaceFuncs := []struct {
+		funcName string
+		args     string
+	}{
+		{"BIT_AND", "`c1`"},
+		{"BIT_OR", "`c1`"},
+		{"BIT_XOR", "`c1`"},
+		{"CAST", "1 AS FLOAT"},
+		{"COUNT", "1"},
+		{"CURDATE", ""},
+		{"CURTIME", ""},
+		{"DATE_ADD", "_UTF8MB4'2011-11-11 10:10:10', INTERVAL 10 SECOND"},
+		{"DATE_SUB", "_UTF8MB4'2011-11-11 10:10:10', INTERVAL 10 SECOND"},
+		{"EXTRACT", "SECOND FROM _UTF8MB4'2011-11-11 10:10:10'"},
+		{"GROUP_CONCAT", "`c2`, `c1` SEPARATOR ','"},
+		{"MAX", "`c1`"},
+		{"MID", "_UTF8MB4'Sakila', -5, 3"},
+		{"MIN", "`c1`"},
+		{"NOW", ""},
+		{"POSITION", "_UTF8MB4'bar' IN _UTF8MB4'foobarbar'"},
+		{"STDDEV_POP", "`c1`"},
+		{"STDDEV_SAMP", "`c1`"},
+		{"SUBSTR", "_UTF8MB4'Quadratically', 5"},
+		{"SUBSTRING", "_UTF8MB4'Quadratically', 5"},
+		{"SUM", "`c1`"},
+		{"SYSDATE", ""},
+		{"TRIM", "_UTF8MB4' foo '"},
+		{"VAR_POP", "`c1`"},
+		{"VAR_SAMP", "`c1`"},
+	}
+
+	testcases := make([]testCase, 0, 3*len(whitespaceFuncs))
+	runTests := func(ignoreSpace bool) {
+		p := parser.New()
+		if ignoreSpace {
+			p.SetSQLMode(mysql.ModeIgnoreSpace)
+		}
+		for _, c := range testcases {
+			_, _, err := p.Parse(c.src, "", "")
+			if !c.ok {
+				require.Errorf(t, err, "source %v", c.src)
+				continue
+			}
+			require.NoErrorf(t, err, "source %v", c.src)
+			if c.ok && !ignoreSpace {
+				RunRestoreTest(t, c.src, c.restore, false)
+			}
+		}
+	}
+
+	for _, function := range whitespaceFuncs {
+		// `x` is recognized as a function name for `x()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("select %s(%s)", function.funcName, function.args), true, fmt.Sprintf("SELECT %s(%s)", function.funcName, function.args)})
+
+		// In MySQL, `select x ()` is recognized as a stored function.
+		// In TiDB, most of these functions are recognized as identifiers while some are builtin functions (such as COUNT, CURDATE)
+		// because the later ones are not added to the token map. We'd better not to modify it since it breaks compatibility.
+		// For example, `select CURDATE ()` reports an error in MySQL but it works well for TiDB.
+
+		// `x` is recognized as an identifier for `x ()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s (a int)", function.funcName), true, fmt.Sprintf("CREATE TABLE `%s` (`a` INT)", function.funcName)})
+
+		// `x` is recognized as a function name for `x()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s(a int)", function.funcName), false, ""})
+	}
+	runTests(false)
+
+	testcases = make([]testCase, 0, 4*len(whitespaceFuncs))
+	for _, function := range whitespaceFuncs {
+		testcases = append(testcases, testCase{fmt.Sprintf("select %s(%s)", function.funcName, function.args), true, fmt.Sprintf("SELECT %s(%s)", function.funcName, function.args)})
+		testcases = append(testcases, testCase{fmt.Sprintf("select %s (%s)", function.funcName, function.args), true, fmt.Sprintf("SELECT %s(%s)", function.funcName, function.args)})
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s (a int)", function.funcName), false, ""})
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s(a int)", function.funcName), false, ""})
+	}
+	runTests(true)
+
+	normalFuncs := []struct {
+		funcName string
+		args     string
+	}{
+		{"ADDDATE", "_UTF8MB4'2011-11-11 10:10:10', INTERVAL 10 SECOND"},
+		{"SESSION_USER", ""},
+		{"SUBDATE", "_UTF8MB4'2011-11-11 10:10:10', INTERVAL 10 SECOND"},
+		{"SYSTEM_USER", ""},
+	}
+
+	testcases = make([]testCase, 0, 4*len(normalFuncs))
+	for _, function := range normalFuncs {
+		// `x` is recognized as a function name for `select x()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("select %s(%s)", function.funcName, function.args), true, fmt.Sprintf("SELECT %s(%s)", function.funcName, function.args)})
+
+		// `x` is recognized as a function name for `select x ()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("select %s (%s)", function.funcName, function.args), true, fmt.Sprintf("SELECT %s(%s)", function.funcName, function.args)})
+
+		// `x` is recognized as an identifier for `create table x ()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s (a int)", function.funcName), true, fmt.Sprintf("CREATE TABLE `%s` (`a` INT)", function.funcName)})
+
+		// `x` is recognized as an identifier for `create table x()`.
+		testcases = append(testcases, testCase{fmt.Sprintf("create table %s(a int)", function.funcName), true, fmt.Sprintf("CREATE TABLE `%s` (`a` INT)", function.funcName)})
+	}
+	runTests(false)
+	runTests(true)
+}
+
+func TestDDL(t *testing.T) {
 	table := []testCase{
 		{"CREATE", false, ""},
 		{"CREATE TABLE", false, ""},
@@ -2022,10 +2333,22 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a.b, b);", false, ""},
 		{"CREATE TABLE foo (a, b.c);", false, ""},
 		{"CREATE TABLE (name CHAR(50) BINARY)", false, ""},
+		// test enable or disable cached table
+		{"ALTER TABLE tmp CACHE", true, "ALTER TABLE `tmp` CACHE"},
+		{"ALTER TABLE tmp NOCACHE", true, "ALTER TABLE `tmp` NOCACHE"},
 		// for create temporary table
 		{"CREATE TEMPORARY TABLE t (a varchar(50), b int);", true, "CREATE TEMPORARY TABLE `t` (`a` VARCHAR(50),`b` INT)"},
 		{"CREATE TEMPORARY TABLE t LIKE t1", true, "CREATE TEMPORARY TABLE `t` LIKE `t1`"},
 		{"DROP TEMPORARY TABLE t", true, "DROP TEMPORARY TABLE `t`"},
+		{"create global temporary table t (a int, b varchar(255)) on commit delete rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) ON COMMIT DELETE ROWS"},
+		{"create temporary table t (a int, b varchar(255))", true, "CREATE TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255))"},
+		{"create global temporary table t (a int, b varchar(255))", false, ""}, // missing on commit delete rows
+		{"create temporary table t (a int, b varchar(255)) on commit delete rows", false, ""},
+		{"create table t (a int, b varchar(255)) on commit delete rows", false, ""},
+		{"create global temporary table t (a int, b varchar(255)) partition by hash(a) partitions 10 on commit delete rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) PARTITION BY HASH (`a`) PARTITIONS 10 ON COMMIT DELETE ROWS"},
+		{"create global temporary table t (a int, b varchar(255)) on commit preserve rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) ON COMMIT PRESERVE ROWS"},
+		{"drop global temporary table t", true, "DROP GLOBAL TEMPORARY TABLE `t`"},
+		{"drop temporary table t", true, "DROP TEMPORARY TABLE `t`"},
 		// test use key word as column name
 		{"CREATE TABLE foo (pump varchar(50), b int);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT)"},
 		{"CREATE TABLE foo (drainer varchar(50), b int);", true, "CREATE TABLE `foo` (`drainer` VARCHAR(50),`b` INT)"},
@@ -2086,13 +2409,20 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE d_n.t_n ALGORITHM = DEFAULT , MAX_ROWS 10, UNION ( d_n.t_n ) , ROW_FORMAT REDUNDANT, STATS_PERSISTENT = DEFAULT", true, "ALTER TABLE `d_n`.`t_n` ALGORITHM = DEFAULT, MAX_ROWS = 10, UNION = (`d_n`.`t_n`), ROW_FORMAT = REDUNDANT, STATS_PERSISTENT = DEFAULT /* TableOptionStatsPersistent is not supported */ "},
 
 		// partition option
+		{"create table t (b int) partition by range columns (b) (partition p0 values less than (not 3), partition p2 values less than (20));", false, ""},
+		{"create table t (b int) partition by range columns (b) (partition p0 values less than (1 or 3), partition p2 values less than (20));", false, ""},
+		{"create table t (b int) partition by range columns (b) (partition p0 values less than (3 is null), partition p2 values less than (20));", false, ""},
+		{"create table t (b int) partition by range (b is null) (partition p0 values less than (10));", false, ""},
+		{"create table t (b int) partition by list (not b) (partition p0 values in (10, 20));", false, ""},
+		{"create table t (b int) partition by hash ( not b );", false, ""},
+		{"create table t (b int) partition by range columns (b) (partition p0 values less than (3 in (3, 4, 5)), partition p2 values less than (20));", false, ""},
 		{"CREATE TABLE t (id int) ENGINE = INNDB PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (20));", true, "CREATE TABLE `t` (`id` INT) ENGINE = INNDB PARTITION BY RANGE (`id`) (PARTITION `p0` VALUES LESS THAN (10),PARTITION `p1` VALUES LESS THAN (20))"},
 		{"create table t (c int) PARTITION BY HASH (c) PARTITIONS 32;", true, "CREATE TABLE `t` (`c` INT) PARTITION BY HASH (`c`) PARTITIONS 32"},
 		{"create table t (c int) PARTITION BY HASH (Year(VDate)) (PARTITION p1980 VALUES LESS THAN (1980) ENGINE = MyISAM, PARTITION p1990 VALUES LESS THAN (1990) ENGINE = MyISAM, PARTITION pothers VALUES LESS THAN MAXVALUE ENGINE = MyISAM)", false, ""},
 		{"create table t (c int) PARTITION BY RANGE (Year(VDate)) (PARTITION p1980 VALUES LESS THAN (1980) ENGINE = MyISAM, PARTITION p1990 VALUES LESS THAN (1990) ENGINE = MyISAM, PARTITION pothers VALUES LESS THAN MAXVALUE ENGINE = MyISAM)", true, "CREATE TABLE `t` (`c` INT) PARTITION BY RANGE (YEAR(`VDate`)) (PARTITION `p1980` VALUES LESS THAN (1980) ENGINE = MyISAM,PARTITION `p1990` VALUES LESS THAN (1990) ENGINE = MyISAM,PARTITION `pothers` VALUES LESS THAN (MAXVALUE) ENGINE = MyISAM)"},
 		{"create table t (c int, `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '') PARTITION BY RANGE (UNIX_TIMESTAMP(create_time)) (PARTITION p201610 VALUES LESS THAN(1477929600), PARTITION p201611 VALUES LESS THAN(1480521600),PARTITION p201612 VALUES LESS THAN(1483200000),PARTITION p201701 VALUES LESS THAN(1485878400),PARTITION p201702 VALUES LESS THAN(1488297600),PARTITION p201703 VALUES LESS THAN(1490976000))", true, "CREATE TABLE `t` (`c` INT,`create_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP() COMMENT '') PARTITION BY RANGE (UNIX_TIMESTAMP(`create_time`)) (PARTITION `p201610` VALUES LESS THAN (1477929600),PARTITION `p201611` VALUES LESS THAN (1480521600),PARTITION `p201612` VALUES LESS THAN (1483200000),PARTITION `p201701` VALUES LESS THAN (1485878400),PARTITION `p201702` VALUES LESS THAN (1488297600),PARTITION `p201703` VALUES LESS THAN (1490976000))"},
 		{"CREATE TABLE `md_product_shop` (`shopCode` varchar(4) DEFAULT NULL COMMENT '地点') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 /*!50100 PARTITION BY KEY (shopCode) PARTITIONS 19 */;", true, "CREATE TABLE `md_product_shop` (`shopCode` VARCHAR(4) DEFAULT NULL COMMENT '地点') ENGINE = InnoDB DEFAULT CHARACTER SET = UTF8MB4 PARTITION BY KEY (`shopCode`) PARTITIONS 19"},
-		{"CREATE TABLE `payinfo1` (`id` bigint(20) NOT NULL AUTO_INCREMENT, `oderTime` datetime NOT NULL) ENGINE=InnoDB AUTO_INCREMENT=641533032 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8 /*!50500 PARTITION BY RANGE COLUMNS(oderTime) (PARTITION P2011 VALUES LESS THAN ('2012-01-01 00:00:00') ENGINE = InnoDB, PARTITION P1201 VALUES LESS THAN ('2012-02-01 00:00:00') ENGINE = InnoDB, PARTITION PMAX VALUES LESS THAN (MAXVALUE) ENGINE = InnoDB)*/;", true, "CREATE TABLE `payinfo1` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`oderTime` DATETIME NOT NULL) ENGINE = InnoDB AUTO_INCREMENT = 641533032 DEFAULT CHARACTER SET = UTF8 ROW_FORMAT = COMPRESSED KEY_BLOCK_SIZE = 8 PARTITION BY RANGE COLUMNS (`oderTime`) (PARTITION `P2011` VALUES LESS THAN ('2012-01-01 00:00:00') ENGINE = InnoDB,PARTITION `P1201` VALUES LESS THAN ('2012-02-01 00:00:00') ENGINE = InnoDB,PARTITION `PMAX` VALUES LESS THAN (MAXVALUE) ENGINE = InnoDB)"},
+		{"CREATE TABLE `payinfo1` (`id` bigint(20) NOT NULL AUTO_INCREMENT, `oderTime` datetime NOT NULL) ENGINE=InnoDB AUTO_INCREMENT=641533032 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8 /*!50500 PARTITION BY RANGE COLUMNS(oderTime) (PARTITION P2011 VALUES LESS THAN ('2012-01-01 00:00:00') ENGINE = InnoDB, PARTITION P1201 VALUES LESS THAN ('2012-02-01 00:00:00') ENGINE = InnoDB, PARTITION PMAX VALUES LESS THAN (MAXVALUE) ENGINE = InnoDB)*/;", true, "CREATE TABLE `payinfo1` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`oderTime` DATETIME NOT NULL) ENGINE = InnoDB AUTO_INCREMENT = 641533032 DEFAULT CHARACTER SET = UTF8 ROW_FORMAT = COMPRESSED KEY_BLOCK_SIZE = 8 PARTITION BY RANGE COLUMNS (`oderTime`) (PARTITION `P2011` VALUES LESS THAN (_UTF8MB4'2012-01-01 00:00:00') ENGINE = InnoDB,PARTITION `P1201` VALUES LESS THAN (_UTF8MB4'2012-02-01 00:00:00') ENGINE = InnoDB,PARTITION `PMAX` VALUES LESS THAN (MAXVALUE) ENGINE = InnoDB)"},
 		{`CREATE TABLE app_channel_daily_report (id bigint(20) NOT NULL AUTO_INCREMENT, app_version varchar(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'default', gmt_create datetime NOT NULL COMMENT '创建时间', PRIMARY KEY (id)) ENGINE=InnoDB AUTO_INCREMENT=33703438 DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
 /*!50100 PARTITION BY RANGE (month(gmt_create)-1)
 (PARTITION part0 VALUES LESS THAN (1) COMMENT = '1月份' ENGINE = InnoDB,
@@ -2106,12 +2436,136 @@ func (s *testParserSuite) TestDDL(c *C) {
  PARTITION part8 VALUES LESS THAN (9) COMMENT = '9月份' ENGINE = InnoDB,
  PARTITION part9 VALUES LESS THAN (10) COMMENT = '10月份' ENGINE = InnoDB,
  PARTITION part10 VALUES LESS THAN (11) COMMENT = '11月份' ENGINE = InnoDB,
- PARTITION part11 VALUES LESS THAN (12) COMMENT = '12月份' ENGINE = InnoDB) */ ;`, true, "CREATE TABLE `app_channel_daily_report` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`app_version` VARCHAR(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT 'default',`gmt_create` DATETIME NOT NULL COMMENT '创建时间',PRIMARY KEY(`id`)) ENGINE = InnoDB AUTO_INCREMENT = 33703438 DEFAULT CHARACTER SET = UTF8 DEFAULT COLLATE = UTF8_UNICODE_CI PARTITION BY RANGE (MONTH(`gmt_create`)-1) (PARTITION `part0` VALUES LESS THAN (1) COMMENT = '1月份' ENGINE = InnoDB,PARTITION `part1` VALUES LESS THAN (2) COMMENT = '2月份' ENGINE = InnoDB,PARTITION `part2` VALUES LESS THAN (3) COMMENT = '3月份' ENGINE = InnoDB,PARTITION `part3` VALUES LESS THAN (4) COMMENT = '4月份' ENGINE = InnoDB,PARTITION `part4` VALUES LESS THAN (5) COMMENT = '5月份' ENGINE = InnoDB,PARTITION `part5` VALUES LESS THAN (6) COMMENT = '6月份' ENGINE = InnoDB,PARTITION `part6` VALUES LESS THAN (7) COMMENT = '7月份' ENGINE = InnoDB,PARTITION `part7` VALUES LESS THAN (8) COMMENT = '8月份' ENGINE = InnoDB,PARTITION `part8` VALUES LESS THAN (9) COMMENT = '9月份' ENGINE = InnoDB,PARTITION `part9` VALUES LESS THAN (10) COMMENT = '10月份' ENGINE = InnoDB,PARTITION `part10` VALUES LESS THAN (11) COMMENT = '11月份' ENGINE = InnoDB,PARTITION `part11` VALUES LESS THAN (12) COMMENT = '12月份' ENGINE = InnoDB)"},
+ PARTITION part11 VALUES LESS THAN (12) COMMENT = '12月份' ENGINE = InnoDB) */ ;`, true, "CREATE TABLE `app_channel_daily_report` (`id` BIGINT(20) NOT NULL AUTO_INCREMENT,`app_version` VARCHAR(32) COLLATE utf8_unicode_ci NOT NULL DEFAULT _UTF8MB4'default',`gmt_create` DATETIME NOT NULL COMMENT '创建时间',PRIMARY KEY(`id`)) ENGINE = InnoDB AUTO_INCREMENT = 33703438 DEFAULT CHARACTER SET = UTF8 DEFAULT COLLATE = UTF8_UNICODE_CI PARTITION BY RANGE (MONTH(`gmt_create`)-1) (PARTITION `part0` VALUES LESS THAN (1) COMMENT = '1月份' ENGINE = InnoDB,PARTITION `part1` VALUES LESS THAN (2) COMMENT = '2月份' ENGINE = InnoDB,PARTITION `part2` VALUES LESS THAN (3) COMMENT = '3月份' ENGINE = InnoDB,PARTITION `part3` VALUES LESS THAN (4) COMMENT = '4月份' ENGINE = InnoDB,PARTITION `part4` VALUES LESS THAN (5) COMMENT = '5月份' ENGINE = InnoDB,PARTITION `part5` VALUES LESS THAN (6) COMMENT = '6月份' ENGINE = InnoDB,PARTITION `part6` VALUES LESS THAN (7) COMMENT = '7月份' ENGINE = InnoDB,PARTITION `part7` VALUES LESS THAN (8) COMMENT = '8月份' ENGINE = InnoDB,PARTITION `part8` VALUES LESS THAN (9) COMMENT = '9月份' ENGINE = InnoDB,PARTITION `part9` VALUES LESS THAN (10) COMMENT = '10月份' ENGINE = InnoDB,PARTITION `part10` VALUES LESS THAN (11) COMMENT = '11月份' ENGINE = InnoDB,PARTITION `part11` VALUES LESS THAN (12) COMMENT = '12月份' ENGINE = InnoDB)"},
 
+		// for placement option
+		// 1. create table
+		{`create table t (c int) primary_region="us";`, false, ""},
+		{`create table t (c int) regions="us,3";`, false, ""},
+		{`create table t (c int) followers="us,3";`, false, ""},
+		{`create table t (c int) followers=3;`, false, ""},
+		{`create table t (c int) followers=0;`, false, ""},
+		{`create table t (c int) voters=3;`, false, ""},
+		{`create table t (c int) learners="us,3";`, false, ""},
+		{`create table t (c int) learners=3;`, false, ""},
+		{`create table t (c int) schedule="even";`, false, ""},
+		{`create table t (c int) constraints="ww";`, false, ""},
+		{`create table t (c int) leader_constraints="ww";`, false, ""},
+		{`create table t (c int) follower_constraints="ww";`, false, ""},
+		{`create table t (c int) voter_constraints="ww";`, false, ""},
+		{`create table t (c int) learner_constraints="ww";`, false, ""},
+		{`create table t (c int) /*T![placement] primary_region="us" */;`, false, ""},
+		{`create table t (c int) /*T![placement] regions="us,3" */;`, false, ""},
+		{`create table t (c int) /*T![placement] followers="us,3 */";`, false, ""},
+		{`create table t (c int) /*T![placement] followers=3 */;`, false, ""},
+		{`create table t (c int) /*T![placement] followers=0 */;`, false, ""},
+		{`create table t (c int) /*T![placement] voters="us,3" */;`, false, ""},
+		{`create table t (c int) /*T![placement] primary_region="us" regions="us,3"  */;`, false, ""},
+		{`create table t (c int) placement policy="ww";`, true, "CREATE TABLE `t` (`c` INT) PLACEMENT POLICY = `ww`"},
+		{"create table t (c int) /*T![placement] placement policy=`x` */;", true, "CREATE TABLE `t` (`c` INT) PLACEMENT POLICY = `x`"},
+		{`create table t (c int) /*T![placement] placement policy="y" */;`, true, "CREATE TABLE `t` (`c` INT) PLACEMENT POLICY = `y`"},
+		// 2. alter table
+		{`alter table t primary_region="us";`, false, ""},
+		{`alter table t regions="us,3";`, false, ""},
+		{`alter table t followers=3;`, false, ""},
+		{`alter table t followers=0;`, false, ""},
+		{`alter table t voters=3;`, false, ""},
+		{`alter table t learners=3;`, false, ""},
+		{`alter table t schedule="even";`, false, ""},
+		{`alter table t constraints="ww";`, false, ""},
+		{`alter table t leader_constraints="ww";`, false, ""},
+		{`alter table t follower_constraints="ww";`, false, ""},
+		{`alter table t voter_constraints="ww";`, false, ""},
+		{`alter table t learner_constraints="ww";`, false, ""},
+		{`alter table t /*T![placement] primary_region="us" */;`, false, ""},
+		{`alter table t placement policy="ww";`, true, "ALTER TABLE `t` PLACEMENT POLICY = `ww`"},
+		{`alter table t /*T![placement] placement policy="ww" */;`, true, "ALTER TABLE `t` PLACEMENT POLICY = `ww`"},
+		// 3. create db
+		{`create database t primary_region="us";`, false, ""},
+		{`create database t regions="us,3";`, false, ""},
+		{`create database t followers=3;`, false, ""},
+		{`create database t followers=0;`, false, ""},
+		{`create database t voters=3;`, false, ""},
+		{`create database t learners=3;`, false, ""},
+		{`create database t schedule="even";`, false, ""},
+		{`create database t constraints="ww";`, false, ""},
+		{`create database t leader_constraints="ww";`, false, ""},
+		{`create database t follower_constraints="ww";`, false, ""},
+		{`create database t voter_constraints="ww";`, false, ""},
+		{`create database t learner_constraints="ww";`, false, ""},
+		{`create database t /*T![placement] primary_region="us" */;`, false, ""},
+		{`create database t placement policy="ww";`, true, "CREATE DATABASE `t` PLACEMENT POLICY = `ww`"},
+		{`create database t default placement policy="ww";`, true, "CREATE DATABASE `t` PLACEMENT POLICY = `ww`"},
+		{`create database t /*T![placement] placement policy="ww" */;`, true, "CREATE DATABASE `t` PLACEMENT POLICY = `ww`"},
+		// 4. alter db
+		{`alter database t primary_region="us";`, false, ""},
+		{`alter database t regions="us,3";`, false, ""},
+		{`alter database t followers=3;`, false, ""},
+		{`alter database t followers=0;`, false, ""},
+		{`alter database t voters=3;`, false, ""},
+		{`alter database t learners=3;`, false, ""},
+		{`alter database t schedule="even";`, false, ""},
+		{`alter database t constraints="ww";`, false, ""},
+		{`alter database t leader_constraints="ww";`, false, ""},
+		{`alter database t follower_constraints="ww";`, false, ""},
+		{`alter database t voter_constraints="ww";`, false, ""},
+		{`alter database t learner_constraints="ww";`, false, ""},
+		{`alter database t /*T![placement] primary_region="us" */;`, false, ""},
+		{`alter database t placement policy="ww";`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `ww`"},
+		{`alter database t default placement policy="ww";`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `ww`"},
+		{`alter database t PLACEMENT POLICY='DEFAULT';`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		{`alter database t PLACEMENT POLICY=DEFAULT;`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		{`alter database t PLACEMENT POLICY = DEFAULT;`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		{`alter database t PLACEMENT POLICY SET DEFAULT`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		{"alter database t PLACEMENT POLICY=`DEFAULT`;", true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		{`alter database t /*T![placement] PLACEMENT POLICY='DEFAULT' */;`, true, "ALTER DATABASE `t` PLACEMENT POLICY = `DEFAULT`"},
+		// 5. create partition
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) primary_region="us");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) regions="us,3");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) followers=3);`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) voters=3);`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) learners=3);`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) schedule="even");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) constraints="ww");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) leader_constraints="ww");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) follower_constraints="ww");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) voter_constraints="ww");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) learner_constraints="ww");`, false, ""},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) placement policy="ww");`, true, "CREATE TABLE `m` (`c` INT) PARTITION BY RANGE (`c`) (PARTITION `p1` VALUES LESS THAN (200) PLACEMENT POLICY = `ww`)"},
+		{`create table m (c int) partition by range (c) (partition p1 values less than (200) /*T![placement] placement policy="ww" */);`, true, "CREATE TABLE `m` (`c` INT) PARTITION BY RANGE (`c`) (PARTITION `p1` VALUES LESS THAN (200) PLACEMENT POLICY = `ww`)"},
+		// 6. alter partition
+		{`alter table m partition t primary_region="us";`, false, ""},
+		{`alter table m partition t regions="us,3";`, false, ""},
+		{`alter table m partition t followers=3;`, false, ""},
+		{`alter table m partition t primary_region="us" followers=3;`, false, ""},
+		{`alter table m partition t voters=3;`, false, ""},
+		{`alter table m partition t learners=3;`, false, ""},
+		{`alter table m partition t schedule="even";`, false, ""},
+		{`alter table m partition t constraints="ww";`, false, ""},
+		{`alter table m partition t leader_constraints="ww";`, false, ""},
+		{`alter table m partition t follower_constraints="ww";`, false, ""},
+		{`alter table m partition t voter_constraints="ww";`, false, ""},
+		{`alter table m partition t learner_constraints="ww";`, false, ""},
+		{`alter table m partition t placement policy="ww";`, true, "ALTER TABLE `m` PARTITION `t` PLACEMENT POLICY = `ww`"},
+		{`alter table m partition t /*T![placement] placement policy="ww" */;`, true, "ALTER TABLE `m` PARTITION `t` PLACEMENT POLICY = `ww`"},
+		// 7. add partition
+		{`alter table m add partition (partition p1 values less than (200) primary_region="us");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) regions="us,3");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) followers=3);`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) voters=3);`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) learners=3);`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) schedule="even");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) constraints="ww");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) leader_constraints="ww");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) follower_constraints="ww");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) voter_constraints="ww");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) learner_constraints="ww");`, false, ""},
+		{`alter table m add partition (partition p1 values less than (200) placement policy="ww");`, true, "ALTER TABLE `m` ADD PARTITION (PARTITION `p1` VALUES LESS THAN (200) PLACEMENT POLICY = `ww`)"},
+		{`alter table m add partition (partition p1 values less than (200) /*T![placement] placement policy="ww" */);`, true, "ALTER TABLE `m` ADD PARTITION (PARTITION `p1` VALUES LESS THAN (200) PLACEMENT POLICY = `ww`)"},
 		// for check clause
 		{"create table t (c1 bool, c2 bool, check (c1 in (0, 1)) not enforced, check (c2 in (0, 1)))", true, "CREATE TABLE `t` (`c1` TINYINT(1),`c2` TINYINT(1),CHECK(`c1` IN (0,1)) NOT ENFORCED,CHECK(`c2` IN (0,1)) ENFORCED)"},
 		{"CREATE TABLE Customer (SD integer CHECK (SD > 0), First_Name varchar(30));", true, "CREATE TABLE `Customer` (`SD` INT CHECK(`SD`>0) ENFORCED,`First_Name` VARCHAR(30))"},
-		{"CREATE TABLE Customer (SD integer CHECK (SD > 0) not enforced, SS varchar(30) check(ss='test') enforced);", true, "CREATE TABLE `Customer` (`SD` INT CHECK(`SD`>0) NOT ENFORCED,`SS` VARCHAR(30) CHECK(`ss`='test') ENFORCED)"},
+		{"CREATE TABLE Customer (SD integer CHECK (SD > 0) not enforced, SS varchar(30) check(ss='test') enforced);", true, "CREATE TABLE `Customer` (`SD` INT CHECK(`SD`>0) NOT ENFORCED,`SS` VARCHAR(30) CHECK(`ss`=_UTF8MB4'test') ENFORCED)"},
 		{"CREATE TABLE Customer (SD integer CHECK (SD > 0) not null, First_Name varchar(30) comment 'string' not null);", true, "CREATE TABLE `Customer` (`SD` INT CHECK(`SD`>0) ENFORCED NOT NULL,`First_Name` VARCHAR(30) COMMENT 'string' NOT NULL)"},
 		{"CREATE TABLE Customer (SD integer comment 'string' CHECK (SD > 0) not null);", true, "CREATE TABLE `Customer` (`SD` INT COMMENT 'string' CHECK(`SD`>0) ENFORCED NOT NULL)"},
 		{"CREATE TABLE Customer (SD integer comment 'string' not enforced, First_Name varchar(30));", false, ""},
@@ -2159,6 +2613,9 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"drop view if exists xxx", true, "DROP VIEW IF EXISTS `xxx`"},
 		{"drop view if exists xxx, yyy", true, "DROP VIEW IF EXISTS `xxx`, `yyy`"},
 		{"drop stats t", true, "DROP STATS `t`"},
+		{"drop stats t partition p0", true, "DROP STATS `t` PARTITION `p0`"},
+		{"drop stats t partition p0, p1, p2", true, "DROP STATS `t` PARTITION `p0`,`p1`,`p2`"},
+		{"drop stats t global", true, "DROP STATS `t` GLOBAL"},
 		// for issue 974
 		{`CREATE TABLE address (
 		id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -2246,13 +2703,13 @@ func (s *testParserSuite) TestDDL(c *C) {
 		summoner_id int(11) DEFAULT '0',
 		union_name varbinary(52) NOT NULL,
 		union_id int(11) DEFAULT '0',
-		PRIMARY KEY (union_name)) ENGINE=MyISAM DEFAULT CHARSET=binary;`, true, "CREATE TABLE `t1` (`accout_id` INT(11) DEFAULT '0',`summoner_id` INT(11) DEFAULT '0',`union_name` VARBINARY(52) NOT NULL,`union_id` INT(11) DEFAULT '0',PRIMARY KEY(`union_name`)) ENGINE = MyISAM DEFAULT CHARACTER SET = BINARY"},
+		PRIMARY KEY (union_name)) ENGINE=MyISAM DEFAULT CHARSET=binary;`, true, "CREATE TABLE `t1` (`accout_id` INT(11) DEFAULT _UTF8MB4'0',`summoner_id` INT(11) DEFAULT _UTF8MB4'0',`union_name` VARBINARY(52) NOT NULL,`union_id` INT(11) DEFAULT _UTF8MB4'0',PRIMARY KEY(`union_name`)) ENGINE = MyISAM DEFAULT CHARACTER SET = BINARY"},
 		// for issue pingcap/parser#310
 		{`CREATE TABLE t (a DECIMAL(20,0), b DECIMAL(30), c FLOAT(25,0))`, true, "CREATE TABLE `t` (`a` DECIMAL(20,0),`b` DECIMAL(30),`c` FLOAT(25,0))"},
 		// Create table with multiple index options.
 		{`create table t (c int, index ci (c) USING BTREE COMMENT "123");`, true, "CREATE TABLE `t` (`c` INT,INDEX `ci`(`c`) USING BTREE COMMENT '123')"},
 		// for default value
-		{"CREATE TABLE sbtest (id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, k integer UNSIGNED DEFAULT '0' NOT NULL, c char(120) DEFAULT '' NOT NULL, pad char(60) DEFAULT '' NOT NULL, PRIMARY KEY  (id) )", true, "CREATE TABLE `sbtest` (`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,`k` INT UNSIGNED DEFAULT '0' NOT NULL,`c` CHAR(120) DEFAULT '' NOT NULL,`pad` CHAR(60) DEFAULT '' NOT NULL,PRIMARY KEY(`id`))"},
+		{"CREATE TABLE sbtest (id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, k integer UNSIGNED DEFAULT '0' NOT NULL, c char(120) DEFAULT '' NOT NULL, pad char(60) DEFAULT '' NOT NULL, PRIMARY KEY  (id) )", true, "CREATE TABLE `sbtest` (`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,`k` INT UNSIGNED DEFAULT _UTF8MB4'0' NOT NULL,`c` CHAR(120) DEFAULT _UTF8MB4'' NOT NULL,`pad` CHAR(60) DEFAULT _UTF8MB4'' NOT NULL,PRIMARY KEY(`id`))"},
 		{"create table test (create_date TIMESTAMP NOT NULL COMMENT '创建日期 create date' DEFAULT now());", true, "CREATE TABLE `test` (`create_date` TIMESTAMP NOT NULL COMMENT '创建日期 create date' DEFAULT CURRENT_TIMESTAMP())"},
 		{"create table ts (t int, v timestamp(3) default CURRENT_TIMESTAMP(3));", true, "CREATE TABLE `ts` (`t` INT,`v` TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3))"}, //TODO: The number yacc in parentheses has not been implemented yet.
 		// Create table with primary key name.
@@ -2276,16 +2733,16 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table a (t int) like b", false, ""},
 		{"create table a (t int) like (b)", false, ""},
 		// Create table with select statement
-		{"create table a select * from b", true, "CREATE TABLE `a`  AS SELECT * FROM `b`"},
-		{"create table a as select * from b", true, "CREATE TABLE `a`  AS SELECT * FROM `b`"},
+		{"create table a select * from b", true, "CREATE TABLE `a` AS SELECT * FROM `b`"},
+		{"create table a as select * from b", true, "CREATE TABLE `a` AS SELECT * FROM `b`"},
 		{"create table a (m int, n datetime) as select * from b", true, "CREATE TABLE `a` (`m` INT,`n` DATETIME) AS SELECT * FROM `b`"},
 		{"create table a (unique(n)) as select n from b", true, "CREATE TABLE `a` (UNIQUE(`n`)) AS SELECT `n` FROM `b`"},
-		{"create table a ignore as select n from b", true, "CREATE TABLE `a`  IGNORE AS SELECT `n` FROM `b`"},
-		{"create table a replace as select n from b", true, "CREATE TABLE `a`  REPLACE AS SELECT `n` FROM `b`"},
+		{"create table a ignore as select n from b", true, "CREATE TABLE `a` IGNORE AS SELECT `n` FROM `b`"},
+		{"create table a replace as select n from b", true, "CREATE TABLE `a` REPLACE AS SELECT `n` FROM `b`"},
 		{"create table a (m int) replace as (select n as m from b union select n+1 as m from c group by 1 limit 2)", true, "CREATE TABLE `a` (`m` INT) REPLACE AS (SELECT `n` AS `m` FROM `b` UNION SELECT `n`+1 AS `m` FROM `c` GROUP BY 1 LIMIT 2)"},
 
 		// Create table with no option is valid for parser
-		{"create table a", true, "CREATE TABLE `a` "},
+		{"create table a", true, "CREATE TABLE `a`"},
 
 		{"create table t (a timestamp default now)", false, ""},
 		{"create table t (a timestamp default now())", true, "CREATE TABLE `t` (`a` TIMESTAMP DEFAULT CURRENT_TIMESTAMP())"},
@@ -2490,6 +2947,8 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE t shard_row_id_bits = 1", true, "ALTER TABLE `t` SHARD_ROW_ID_BITS = 1"},
 		{"ALTER TABLE t AUTO_INCREMENT 3", true, "ALTER TABLE `t` AUTO_INCREMENT = 3"},
 		{"ALTER TABLE t AUTO_INCREMENT = 3", true, "ALTER TABLE `t` AUTO_INCREMENT = 3"},
+		{"ALTER TABLE t FORCE AUTO_INCREMENT 3", true, "ALTER TABLE `t` FORCE AUTO_INCREMENT = 3"},
+		{"ALTER TABLE t FORCE AUTO_INCREMENT = 3", true, "ALTER TABLE `t` FORCE AUTO_INCREMENT = 3"},
 		{"ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` mediumtext CHARACTER SET UTF8MB4 COLLATE UTF8MB4_UNICODE_CI NOT NULL , ALGORITHM = DEFAULT;", true, "ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` MEDIUMTEXT CHARACTER SET UTF8MB4 COLLATE utf8mb4_unicode_ci NOT NULL, ALGORITHM = DEFAULT"},
 		{"ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` mediumtext CHARACTER SET UTF8MB4 COLLATE UTF8MB4_UNICODE_CI NOT NULL , ALGORITHM = INPLACE;", true, "ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` MEDIUMTEXT CHARACTER SET UTF8MB4 COLLATE utf8mb4_unicode_ci NOT NULL, ALGORITHM = INPLACE"},
 		{"ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` mediumtext CHARACTER SET UTF8MB4 COLLATE UTF8MB4_UNICODE_CI NOT NULL , ALGORITHM = COPY;", true, "ALTER TABLE `hello-world@dev`.`User` ADD COLUMN `name` MEDIUMTEXT CHARACTER SET UTF8MB4 COLLATE utf8mb4_unicode_ci NOT NULL, ALGORITHM = COPY"},
@@ -2532,6 +2991,11 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE t_n LOCK = DEFAULT , DROP CHECK ident;", true, "ALTER TABLE `t_n` LOCK = DEFAULT, DROP CHECK `ident`"},
 		{"ALTER TABLE t_n ALTER CHECK ident ENFORCED;", true, "ALTER TABLE `t_n` ALTER CHECK `ident` ENFORCED"},
 		{"ALTER TABLE t_n ALTER CHECK ident NOT ENFORCED;", true, "ALTER TABLE `t_n` ALTER CHECK `ident` NOT ENFORCED"},
+		{"ALTER TABLE t_n DROP CONSTRAINT ident", true, "ALTER TABLE `t_n` DROP CHECK `ident`"},
+		{"ALTER TABLE t_n DROP CHECK ident", true, "ALTER TABLE `t_n` DROP CHECK `ident`"},
+		{"ALTER TABLE t_n ALTER CONSTRAINT ident", false, ""},
+		{"ALTER TABLE t_n ALTER CONSTRAINT ident enforced", true, "ALTER TABLE `t_n` ALTER CHECK `ident` ENFORCED"},
+		{"ALTER TABLE t_n ALTER CHECK ident not enforced", true, "ALTER TABLE `t_n` ALTER CHECK `ident` NOT ENFORCED"},
 
 		{"alter table t analyze partition a", true, "ANALYZE TABLE `t` PARTITION `a`"},
 		{"alter table t analyze partition a with 4 buckets", true, "ANALYZE TABLE `t` PARTITION `a` WITH 4 BUCKETS"},
@@ -2572,6 +3036,28 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE members REORGANIZE PARTITION p1,p2,p3 INTO ( PARTITION s0 VALUES LESS THAN (1960), PARTITION s1 VALUES LESS THAN (1970));", true, "ALTER TABLE `members` REORGANIZE PARTITION `p1`,`p2`,`p3` INTO (PARTITION `s0` VALUES LESS THAN (1960), PARTITION `s1` VALUES LESS THAN (1970))"},
 		{"alter table t reorganize partition remove partition;", false, ""},
 		{"alter table t reorganize partition no_write_to_binlog remove into (partition p0 VALUES LESS THAN (1991));", true, "ALTER TABLE `t` REORGANIZE PARTITION NO_WRITE_TO_BINLOG `remove` INTO (PARTITION `p0` VALUES LESS THAN (1991))"},
+
+		// alter attributes
+		{"ALTER TABLE t ATTRIBUTES='str'", true, "ALTER TABLE `t` ATTRIBUTES='str'"},
+		{"ALTER TABLE t ATTRIBUTES='str1,str2'", true, "ALTER TABLE `t` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t ATTRIBUTES=\"str1,str2\"", true, "ALTER TABLE `t` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t ATTRIBUTES 'str1,str2'", true, "ALTER TABLE `t` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t ATTRIBUTES \"str1,str2\"", true, "ALTER TABLE `t` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t ATTRIBUTES=DEFAULT", true, "ALTER TABLE `t` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t ATTRIBUTES=default", true, "ALTER TABLE `t` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t ATTRIBUTES=DeFaUlT", true, "ALTER TABLE `t` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t ATTRIBUTES", false, ""},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES='str'", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES='str'"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES='str1,str2'", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES=\"str1,str2\"", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES 'str1,str2'", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES \"str1,str2\"", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES='str1,str2'"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES=DEFAULT", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES=default", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES=DeFaUlT", true, "ALTER TABLE `t` PARTITION `p` ATTRIBUTES=DEFAULT"},
+		{"ALTER TABLE t PARTITION p ATTRIBUTES", false, ""},
+		// For https://github.com/pingcap/tidb/issues/26778
+		{"CREATE TABLE t1 (attributes int);", true, "CREATE TABLE `t1` (`attributes` INT)"},
 
 		// For create index statement
 		{"CREATE INDEX idx ON t (a)", true, "CREATE INDEX `idx` ON `t` (`a`)"},
@@ -2843,17 +3329,23 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE ident ADD ( CONSTRAINT FOREIGN KEY ident ( EXECUTE ( 123 ) ) REFERENCES t ( a ) MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL )", true, "ALTER TABLE `ident` ADD COLUMN (CONSTRAINT `ident` FOREIGN KEY (`EXECUTE`(123)) REFERENCES `t`(`a`) MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL)"},
 		// for CONSTRAINT cont'd, the following tests are for another aspect of the incompatibility
 		{"ALTER TABLE t ADD COLUMN a DATE CHECK ( a > 0 ) FIRST", true, "ALTER TABLE `t` ADD COLUMN `a` DATE CHECK(`a`>0) ENFORCED FIRST"},
-		{"ALTER TABLE t ADD a1 int CONSTRAINT ident CHECK ( a1 > 1 ) REFERENCES b ON DELETE CASCADE ON UPDATE CASCADE;", true, "ALTER TABLE `t` ADD COLUMN `a1` INT CHECK(`a1`>1) ENFORCED REFERENCES `b` ON DELETE CASCADE ON UPDATE CASCADE"},
+		{"ALTER TABLE t ADD a1 int CONSTRAINT ident CHECK ( a1 > 1 ) REFERENCES b ON DELETE CASCADE ON UPDATE CASCADE;", true, "ALTER TABLE `t` ADD COLUMN `a1` INT CONSTRAINT `ident` CHECK(`a1`>1) ENFORCED REFERENCES `b` ON DELETE CASCADE ON UPDATE CASCADE"},
 		{"ALTER TABLE t ADD COLUMN a DATE CONSTRAINT CHECK ( a > 0 ) FIRST", true, "ALTER TABLE `t` ADD COLUMN `a` DATE CHECK(`a`>0) ENFORCED FIRST"},
-		{"ALTER TABLE t ADD a TINYBLOB CONSTRAINT ident CHECK ( 1>2 ) REFERENCES b ON DELETE CASCADE ON UPDATE CASCADE", true, "ALTER TABLE `t` ADD COLUMN `a` TINYBLOB CHECK(1>2) ENFORCED REFERENCES `b` ON DELETE CASCADE ON UPDATE CASCADE"},
-		{"ALTER TABLE t ADD a2 int CONSTRAINT ident CHECK (a2 > 1) ENFORCED", true, "ALTER TABLE `t` ADD COLUMN `a2` INT CHECK(`a2`>1) ENFORCED"},
-		{"ALTER TABLE t ADD a2 int CONSTRAINT ident CHECK (a2 > 1) NOT ENFORCED", true, "ALTER TABLE `t` ADD COLUMN `a2` INT CHECK(`a2`>1) NOT ENFORCED"},
+		{"ALTER TABLE t ADD a TINYBLOB CONSTRAINT ident CHECK ( 1>2 ) REFERENCES b ON DELETE CASCADE ON UPDATE CASCADE", true, "ALTER TABLE `t` ADD COLUMN `a` TINYBLOB CONSTRAINT `ident` CHECK(1>2) ENFORCED REFERENCES `b` ON DELETE CASCADE ON UPDATE CASCADE"},
+		{"ALTER TABLE t ADD a2 int CONSTRAINT ident CHECK (a2 > 1) ENFORCED", true, "ALTER TABLE `t` ADD COLUMN `a2` INT CONSTRAINT `ident` CHECK(`a2`>1) ENFORCED"},
+		{"ALTER TABLE t ADD a2 int CONSTRAINT ident CHECK (a2 > 1) NOT ENFORCED", true, "ALTER TABLE `t` ADD COLUMN `a2` INT CONSTRAINT `ident` CHECK(`a2`>1) NOT ENFORCED"},
 		{"ALTER TABLE t ADD a2 int CONSTRAINT ident primary key REFERENCES b ON DELETE CASCADE ON UPDATE CASCADE;", false, ""},
 		{"ALTER TABLE t ADD a2 int CONSTRAINT ident primary key (a2))", false, ""},
 		{"ALTER TABLE t ADD a2 int CONSTRAINT ident unique key (a2))", false, ""},
 
 		{"ALTER TABLE t SET TIFLASH REPLICA 2 LOCATION LABELS 'a','b'", true, "ALTER TABLE `t` SET TIFLASH REPLICA 2 LOCATION LABELS 'a', 'b'"},
 		{"ALTER TABLE t SET TIFLASH REPLICA 0", true, "ALTER TABLE `t` SET TIFLASH REPLICA 0"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 2 LOCATION LABELS 'a','b'", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 2 LOCATION LABELS 'a', 'b'"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 0", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 0"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 1 SET TIFLASH REPLICA 2 LOCATION LABELS 'a','b'", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 1 SET TIFLASH REPLICA 2 LOCATION LABELS 'a', 'b'"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 1 SET TIFLASH REPLICA 2", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 1 SET TIFLASH REPLICA 2"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 1 LOCATION LABELS 'a','b' SET TIFLASH REPLICA 2", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 1 LOCATION LABELS 'a', 'b' SET TIFLASH REPLICA 2"},
+		{"ALTER DATABASE t SET TIFLASH REPLICA 1 LOCATION LABELS 'a','b' SET TIFLASH REPLICA 2 LOCATION LABELS 'a', 'b'", true, "ALTER DATABASE `t` SET TIFLASH REPLICA 1 LOCATION LABELS 'a', 'b' SET TIFLASH REPLICA 2 LOCATION LABELS 'a', 'b'"},
 
 		// for issue 537
 		{"CREATE TABLE IF NOT EXISTS table_ident (a SQL_TSI_YEAR(4), b SQL_TSI_YEAR);", true, "CREATE TABLE IF NOT EXISTS `table_ident` (`a` YEAR(4),`b` YEAR)"},
@@ -2976,340 +3468,495 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (a bigint primary key auto_random(4), b varchar(100)) auto_random_base 200", true, "CREATE TABLE `t` (`a` BIGINT PRIMARY KEY AUTO_RANDOM(4),`b` VARCHAR(100)) AUTO_RANDOM_BASE = 200"},
 		{"alter table t auto_random_base = 50", true, "ALTER TABLE `t` AUTO_RANDOM_BASE = 50"},
 		{"alter table t auto_increment 30, auto_random_base 40", true, "ALTER TABLE `t` AUTO_INCREMENT = 30, AUTO_RANDOM_BASE = 40"},
+		{"alter table t force auto_random_base = 50", true, "ALTER TABLE `t` FORCE AUTO_RANDOM_BASE = 50"},
+		{"alter table t auto_increment 30, force auto_random_base 40", true, "ALTER TABLE `t` AUTO_INCREMENT = 30, FORCE AUTO_RANDOM_BASE = 40"},
+
+		// for alter sequence
+		{"alter sequence seq", false, ""},
+		{"alter sequence seq comment=\"haha\"", false, ""},
+		{"alter sequence seq start = 1", true, "ALTER SEQUENCE `seq` START WITH 1"},
+		{"alter sequence seq start with 1 increment by 1", true, "ALTER SEQUENCE `seq` START WITH 1 INCREMENT BY 1"},
+		{"alter sequence seq start with 1 increment by 2 minvalue 0 maxvalue 100", true, "ALTER SEQUENCE `seq` START WITH 1 INCREMENT BY 2 MINVALUE 0 MAXVALUE 100"},
+		{"alter sequence seq increment -1 start with -1 minvalue -1 maxvalue -1000 cache = 10 nocycle", true, "ALTER SEQUENCE `seq` INCREMENT BY -1 START WITH -1 MINVALUE -1 MAXVALUE -1000 CACHE 10 NOCYCLE"},
+		{"alter sequence if exists seq2 increment = 2", true, "ALTER SEQUENCE IF EXISTS `seq2` INCREMENT BY 2"},
+		{"alter sequence seq restart", true, "ALTER SEQUENCE `seq` RESTART"},
+		{"alter sequence seq start with 3 restart with 5", true, "ALTER SEQUENCE `seq` START WITH 3 RESTART WITH 5"},
+		{"alter sequence seq restart = 5", true, "ALTER SEQUENCE `seq` RESTART WITH 5"},
+		{"create sequence seq restart = 5", false, ""},
+
+		// for issue 18149
+		{"create table t (a int, index ``(a))", true, "CREATE TABLE `t` (`a` INT,INDEX ``(`a`))"},
+
+		// for clustered index
+		{"create table t (a int, b varchar(255), primary key(b, a) clustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255),PRIMARY KEY(`b`, `a`) CLUSTERED)"},
+		{"create table t (a int, b varchar(255), primary key(b, a) nonclustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255),PRIMARY KEY(`b`, `a`) NONCLUSTERED)"},
+		{"create table t (a int primary key nonclustered, b varchar(255))", true, "CREATE TABLE `t` (`a` INT PRIMARY KEY NONCLUSTERED,`b` VARCHAR(255))"},
+		{"create table t (a int, b varchar(255) primary key clustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255) PRIMARY KEY CLUSTERED)"},
+		{"create table t (a int, b varchar(255) default 'a' primary key clustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255) DEFAULT _UTF8MB4'a' PRIMARY KEY CLUSTERED)"},
+		{"create table t (a int, b varchar(255) primary key nonclustered, primary key(b, a) nonclustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255) PRIMARY KEY NONCLUSTERED,PRIMARY KEY(`b`, `a`) NONCLUSTERED)"},
+		{"create table t (a int, b varchar(255), primary key(b, a) using RTREE nonclustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255),PRIMARY KEY(`b`, `a`) NONCLUSTERED USING RTREE)"},
+		{"create table t (a int, b varchar(255), primary key(b, a) using RTREE clustered nonclustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255),PRIMARY KEY(`b`, `a`) NONCLUSTERED USING RTREE)"},
+		{"create table t (a int, b varchar(255), primary key(b, a) using RTREE nonclustered clustered)", true, "CREATE TABLE `t` (`a` INT,`b` VARCHAR(255),PRIMARY KEY(`b`, `a`) CLUSTERED USING RTREE)"},
+		{"create table t (a int, b varchar(255) clustered primary key)", false, ""},
+		{"create table t (a int, b varchar(255) primary key nonclustered clustered)", false, ""},
+		{"alter table t add primary key (`a`, `b`) clustered", true, "ALTER TABLE `t` ADD PRIMARY KEY(`a`, `b`) CLUSTERED"},
+		{"alter table t add primary key (`a`, `b`) nonclustered", true, "ALTER TABLE `t` ADD PRIMARY KEY(`a`, `b`) NONCLUSTERED"},
+
+		// for drop placement policy
+		{"drop placement policy x", true, "DROP PLACEMENT POLICY `x`"},
+		{"drop placement policy x, y", false, ""},
+		{"drop placement policy if exists x", true, "DROP PLACEMENT POLICY IF EXISTS `x`"},
+		{"drop placement policy if exists x, y", false, ""},
+		// for show create placement policy
+		{"show create placement policy x", true, "SHOW CREATE PLACEMENT POLICY `x`"},
+		{"show create placement policy if exists x", false, ""},
+		{"show create placement policy x, y", false, ""},
+		{"show create placement policy `placement`", true, "SHOW CREATE PLACEMENT POLICY `placement`"},
+		// for create placement policy
+		{"create placement policy x primary_region='us'", true, "CREATE PLACEMENT POLICY `x` PRIMARY_REGION = 'us'"},
+		{"create placement policy x region='us, 3'", false, ""},
+		{"create placement policy x followers=3", true, "CREATE PLACEMENT POLICY `x` FOLLOWERS = 3"},
+		{"create placement policy x followers=0", false, ""},
+		{"create placement policy x voters=3", true, "CREATE PLACEMENT POLICY `x` VOTERS = 3"},
+		{"create placement policy x learners=3", true, "CREATE PLACEMENT POLICY `x` LEARNERS = 3"},
+		{"create placement policy x schedule='even'", true, "CREATE PLACEMENT POLICY `x` SCHEDULE = 'even'"},
+		{"create placement policy x constraints='ww'", true, "CREATE PLACEMENT POLICY `x` CONSTRAINTS = 'ww'"},
+		{"create placement policy x leader_constraints='ww'", true, "CREATE PLACEMENT POLICY `x` LEADER_CONSTRAINTS = 'ww'"},
+		{"create placement policy x follower_constraints='ww'", true, "CREATE PLACEMENT POLICY `x` FOLLOWER_CONSTRAINTS = 'ww'"},
+		{"create placement policy x voter_constraints='ww'", true, "CREATE PLACEMENT POLICY `x` VOTER_CONSTRAINTS = 'ww'"},
+		{"create placement policy x learner_constraints='ww'", true, "CREATE PLACEMENT POLICY `x` LEARNER_CONSTRAINTS = 'ww'"},
+		{"create placement policy x primary_region='cn' regions='us' schedule='even'", true, "CREATE PLACEMENT POLICY `x` PRIMARY_REGION = 'cn' REGIONS = 'us' SCHEDULE = 'even'"},
+		{"create placement policy x primary_region='cn', leader_constraints='ww', leader_constraints='yy'", true, "CREATE PLACEMENT POLICY `x` PRIMARY_REGION = 'cn' LEADER_CONSTRAINTS = 'ww' LEADER_CONSTRAINTS = 'yy'"},
+		{"create placement policy if not exists x regions = 'us', follower_constraints='yy'", true, "CREATE PLACEMENT POLICY IF NOT EXISTS `x` REGIONS = 'us' FOLLOWER_CONSTRAINTS = 'yy'"},
+		{"create or replace placement policy x regions='us'", true, "CREATE OR REPLACE PLACEMENT POLICY `x` REGIONS = 'us'"},
+		{"create placement policy x placement policy y", false, ""},
+
+		{"alter placement policy x primary_region='us'", true, "ALTER PLACEMENT POLICY `x` PRIMARY_REGION = 'us'"},
+		{"alter placement policy x region='us, 3'", false, ""},
+		{"alter placement policy x followers=3", true, "ALTER PLACEMENT POLICY `x` FOLLOWERS = 3"},
+		{"alter placement policy x voters=3", true, "ALTER PLACEMENT POLICY `x` VOTERS = 3"},
+		{"alter placement policy x learners=3", true, "ALTER PLACEMENT POLICY `x` LEARNERS = 3"},
+		{"alter placement policy x schedule='even'", true, "ALTER PLACEMENT POLICY `x` SCHEDULE = 'even'"},
+		{"alter placement policy x constraints='ww'", true, "ALTER PLACEMENT POLICY `x` CONSTRAINTS = 'ww'"},
+		{"alter placement policy x leader_constraints='ww'", true, "ALTER PLACEMENT POLICY `x` LEADER_CONSTRAINTS = 'ww'"},
+		{"alter placement policy x follower_constraints='ww'", true, "ALTER PLACEMENT POLICY `x` FOLLOWER_CONSTRAINTS = 'ww'"},
+		{"alter placement policy x voter_constraints='ww'", true, "ALTER PLACEMENT POLICY `x` VOTER_CONSTRAINTS = 'ww'"},
+		{"alter placement policy x learner_constraints='ww'", true, "ALTER PLACEMENT POLICY `x` LEARNER_CONSTRAINTS = 'ww'"},
+		{"alter placement policy x primary_region='cn' regions='us' schedule='even'", true, "ALTER PLACEMENT POLICY `x` PRIMARY_REGION = 'cn' REGIONS = 'us' SCHEDULE = 'even'"},
+		{"alter placement policy x primary_region='cn', leader_constraints='ww', leader_constraints='yy'", true, "ALTER PLACEMENT POLICY `x` PRIMARY_REGION = 'cn' LEADER_CONSTRAINTS = 'ww' LEADER_CONSTRAINTS = 'yy'"},
+		{"alter placement policy if exists x regions = 'us', follower_constraints='yy'", true, "ALTER PLACEMENT POLICY IF EXISTS `x` REGIONS = 'us' FOLLOWER_CONSTRAINTS = 'yy'"},
+		{"alter placement policy x placement policy y", false, ""},
+
+		// for table stats options
+		// 1. create table with options
+		{"CREATE TABLE t (a int) STATS_BUCKETS=1", true, "CREATE TABLE `t` (`a` INT) STATS_BUCKETS = 1"},
+		{"CREATE TABLE t (a int) STATS_BUCKETS='abc'", false, ""},
+		{"CREATE TABLE t (a int) STATS_BUCKETS=", false, ""},
+		{"CREATE TABLE t (a int) STATS_TOPN=1", true, "CREATE TABLE `t` (`a` INT) STATS_TOPN = 1"},
+		{"CREATE TABLE t (a int) STATS_TOPN='abc'", false, ""},
+		{"CREATE TABLE t (a int) STATS_AUTO_RECALC=1", true, "CREATE TABLE `t` (`a` INT) STATS_AUTO_RECALC = 1"},
+		{"CREATE TABLE t (a int) STATS_AUTO_RECALC='abc'", false, ""},
+		{"CREATE TABLE t(a int) STATS_SAMPLE_RATE=0.1", true, "CREATE TABLE `t` (`a` INT) STATS_SAMPLE_RATE = 0.1"},
+		{"CREATE TABLE t (a int) STATS_SAMPLE_RATE='abc'", false, ""},
+		{"CREATE TABLE t (a int) STATS_COL_CHOICE='all'", true, "CREATE TABLE `t` (`a` INT) STATS_COL_CHOICE = 'all'"},
+		{"CREATE TABLE t (a int) STATS_COL_CHOICE='list'", true, "CREATE TABLE `t` (`a` INT) STATS_COL_CHOICE = 'list'"},
+		{"CREATE TABLE t (a int) STATS_COL_CHOICE=1", false, ""},
+		{"CREATE TABLE t (a int, b int) STATS_COL_LIST='a,b'", true, "CREATE TABLE `t` (`a` INT,`b` INT) STATS_COL_LIST = 'a,b'"},
+		{"CREATE TABLE t (a int, b int) STATS_COL_LIST=1", false, ""},
+		{"CREATE TABLE t (a int) STATS_BUCKETS=1,STATS_TOPN=1", true, "CREATE TABLE `t` (`a` INT) STATS_BUCKETS = 1 STATS_TOPN = 1"},
+		// 2. create partition table with options
+		{"CREATE TABLE t (a int) STATS_BUCKETS=1,STATS_TOPN=1 PARTITION BY RANGE (a) (PARTITION p1 VALUES LESS THAN (200))", true, "CREATE TABLE `t` (`a` INT) STATS_BUCKETS = 1 STATS_TOPN = 1 PARTITION BY RANGE (`a`) (PARTITION `p1` VALUES LESS THAN (200))"},
+		// 3. alter table with options
+		{"ALTER TABLE t STATS_OPTIONS='str'", true, "ALTER TABLE `t` STATS_OPTIONS='str'"},
+		{"ALTER TABLE t STATS_OPTIONS='str1,str2'", true, "ALTER TABLE `t` STATS_OPTIONS='str1,str2'"},
+		{"ALTER TABLE t STATS_OPTIONS=\"str1,str2\"", true, "ALTER TABLE `t` STATS_OPTIONS='str1,str2'"},
+		{"ALTER TABLE t STATS_OPTIONS 'str1,str2'", true, "ALTER TABLE `t` STATS_OPTIONS='str1,str2'"},
+		{"ALTER TABLE t STATS_OPTIONS \"str1,str2\"", true, "ALTER TABLE `t` STATS_OPTIONS='str1,str2'"},
+		{"ALTER TABLE t STATS_OPTIONS=DEFAULT", true, "ALTER TABLE `t` STATS_OPTIONS=DEFAULT"},
+		{"ALTER TABLE t STATS_OPTIONS=default", true, "ALTER TABLE `t` STATS_OPTIONS=DEFAULT"},
+		{"ALTER TABLE t STATS_OPTIONS=DeFaUlT", true, "ALTER TABLE `t` STATS_OPTIONS=DEFAULT"},
+		{"ALTER TABLE t STATS_OPTIONS", false, ""},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestHintError(c *C) {
-	parser := parser.New()
-	stmt, warns, err := parser.Parse("select /*+ tidb_unknown(T1,t2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(len(warns), Equals, 1)
-	c.Assert(warns[0], ErrorMatches, `.*Optimizer hint syntax error at line 1 column 23 near "tidb_unknown\(T1,t2\) \*/" `)
-	c.Assert(len(stmt[0].(*ast.SelectStmt).TableHints), Equals, 0)
-	stmt, warns, err = parser.Parse("select /*+ TIDB_INLJ(t1, T2) tidb_unknow(T1,t2, 1) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(len(stmt[0].(*ast.SelectStmt).TableHints), Equals, 0)
-	c.Assert(err, IsNil)
-	c.Assert(len(warns), Equals, 1)
-	c.Assert(warns[0], ErrorMatches, `.*Optimizer hint syntax error at line 1 column 40 near "tidb_unknow\(T1,t2, 1\) \*/" `)
-	stmt, _, err = parser.Parse("select c1, c2 from /*+ tidb_unknow(T1,t2) */ t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil) // Hints are ignored after the "FROM" keyword!
-	stmt, _, err = parser.Parse("select1 /*+ TIDB_INLJ(t1, T2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "line 1 column 7 near \"select1 /*+ TIDB_INLJ(t1, T2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1\" ")
-	stmt, _, err = parser.Parse("select /*+ TIDB_INLJ(t1, T2) */ c1, c2 fromt t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Equals, "line 1 column 47 near \"t1, t2 where t1.c1 = t2.c1\" ")
-	_, _, err = parser.Parse("SELECT 1 FROM DUAL WHERE 1 IN (SELECT /*+ DEBUG_HINT3 */ 1)", "", "")
-	c.Assert(err, IsNil)
-	stmt, _, err = parser.Parse("insert into t select /*+ memory_quota(1 MB) */ * from t;", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(len(stmt[0].(*ast.InsertStmt).TableHints), Equals, 0)
-	c.Assert(len(stmt[0].(*ast.InsertStmt).Select.(*ast.SelectStmt).TableHints), Equals, 1)
-	stmt, _, err = parser.Parse("insert /*+ memory_quota(1 MB) */ into t select * from t;", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(len(stmt[0].(*ast.InsertStmt).TableHints), Equals, 1)
+func TestHintError(t *testing.T) {
+	p := parser.New()
+	stmt, warns, err := p.Parse("select /*+ tidb_unknown(T1,t2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
+	require.Len(t, warns, 1)
+	require.Regexp(t, `Optimizer hint syntax error at line 1 column 23 near "tidb_unknown\(T1,t2\) \*/" $`, warns[0].Error())
+	require.Len(t, stmt[0].(*ast.SelectStmt).TableHints, 0)
+	stmt, warns, err = p.Parse("select /*+ TIDB_INLJ(t1, T2) tidb_unknow(T1,t2, 1) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.Len(t, stmt[0].(*ast.SelectStmt).TableHints, 0)
+	require.NoError(t, err)
+	require.Len(t, warns, 1)
+	require.Regexp(t, `Optimizer hint syntax error at line 1 column 40 near "tidb_unknow\(T1,t2, 1\) \*/" $`, warns[0].Error())
+	_, _, err = p.Parse("select c1, c2 from /*+ tidb_unknow(T1,t2) */ t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err) // Hints are ignored after the "FROM" keyword!
+	_, _, err = p.Parse("select1 /*+ TIDB_INLJ(t1, T2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.EqualError(t, err, "line 1 column 7 near \"select1 /*+ TIDB_INLJ(t1, T2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1\" ")
+	_, _, err = p.Parse("select /*+ TIDB_INLJ(t1, T2) */ c1, c2 fromt t1, t2 where t1.c1 = t2.c1", "", "")
+	require.EqualError(t, err, "line 1 column 47 near \"t1, t2 where t1.c1 = t2.c1\" ")
+	_, _, err = p.Parse("SELECT 1 FROM DUAL WHERE 1 IN (SELECT /*+ DEBUG_HINT3 */ 1)", "", "")
+	require.NoError(t, err)
+	stmt, _, err = p.Parse("insert into t select /*+ memory_quota(1 MB) */ * from t;", "", "")
+	require.NoError(t, err)
+	require.Len(t, stmt[0].(*ast.InsertStmt).TableHints, 0)
+	require.Len(t, stmt[0].(*ast.InsertStmt).Select.(*ast.SelectStmt).TableHints, 1)
+	stmt, _, err = p.Parse("insert /*+ memory_quota(1 MB) */ into t select * from t;", "", "")
+	require.NoError(t, err)
+	require.Len(t, stmt[0].(*ast.InsertStmt).TableHints, 1)
+
+	_, warns, err = p.Parse("SELECT id FROM tbl WHERE id = 0 FOR UPDATE /*+ xyz */", "", "")
+	require.NoError(t, err)
+	require.Len(t, warns, 1)
+	require.Regexp(t, `near '/\*\+' at line 1$`, warns[0].Error())
+
+	_, warns, err = p.Parse("create global binding for select /*+ max_execution_time(1) */ 1 using select /*+ max_execution_time(1) */ 1;\n", "", "")
+	require.NoError(t, err)
+	require.Len(t, warns, 0)
 }
 
-func (s *testParserSuite) TestErrorMsg(c *C) {
-	parser := parser.New()
-	_, _, err := parser.Parse("select1 1", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 7 near \"select1 1\" ")
-	_, _, err = parser.Parse("select 1 from1 dual", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 19 near \"dual\" ")
-	_, _, err = parser.Parse("select * from t1 join t2 from t1.a = t2.a;", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 29 near \"from t1.a = t2.a;\" ")
-	_, _, err = parser.Parse("select * from t1 join t2 one t1.a = t2.a;", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 31 near \"t1.a = t2.a;\" ")
-	_, _, err = parser.Parse("select * from t1 join t2 on t1.a >>> t2.a;", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 36 near \"> t2.a;\" ")
+func TestErrorMsg(t *testing.T) {
+	p := parser.New()
+	_, _, err := p.Parse("select1 1", "", "")
+	require.EqualError(t, err, "line 1 column 7 near \"select1 1\" ")
+	_, _, err = p.Parse("select 1 from1 dual", "", "")
+	require.EqualError(t, err, "line 1 column 19 near \"dual\" ")
+	_, _, err = p.Parse("select * from t1 join t2 from t1.a = t2.a;", "", "")
+	require.EqualError(t, err, "line 1 column 29 near \"from t1.a = t2.a;\" ")
+	_, _, err = p.Parse("select * from t1 join t2 one t1.a = t2.a;", "", "")
+	require.EqualError(t, err, "line 1 column 31 near \"t1.a = t2.a;\" ")
+	_, _, err = p.Parse("select * from t1 join t2 on t1.a >>> t2.a;", "", "")
+	require.EqualError(t, err, "line 1 column 36 near \"> t2.a;\" ")
 
-	_, _, err = parser.Parse("create table t(f_year year(5))ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1818]Supports only YEAR or YEAR(4) column")
+	_, _, err = p.Parse("create table t(f_year year(5))ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;", "", "")
+	require.EqualError(t, err, "[parser:1818]Supports only YEAR or YEAR(4) column")
 
-	_, _, err = parser.Parse("select ifnull(a,0) & ifnull(a,0) like '55' ESCAPE '\\\\a' from t;", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1210]Incorrect arguments to ESCAPE")
+	_, _, err = p.Parse("select ifnull(a,0) & ifnull(a,0) like '55' ESCAPE '\\\\a' from t;", "", "")
+	require.EqualError(t, err, "[parser:1210]Incorrect arguments to ESCAPE")
 
-	_, _, err = parser.Parse("load data infile 'aaa' into table aaa FIELDS  Enclosed by '\\\\b';", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1083]Field separator argument is not what is expected; check the manual")
+	_, _, err = p.Parse("load data infile 'aaa' into table aaa FIELDS  Enclosed by '\\\\b';", "", "")
+	require.EqualError(t, err, "[parser:1083]Field separator argument is not what is expected; check the manual")
 
-	_, _, err = parser.Parse("load data infile 'aaa' into table aaa FIELDS  Escaped by '\\\\b';", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1083]Field separator argument is not what is expected; check the manual")
+	_, _, err = p.Parse("load data infile 'aaa' into table aaa FIELDS  Escaped by '\\\\b';", "", "")
+	require.EqualError(t, err, "[parser:1083]Field separator argument is not what is expected; check the manual")
 
-	_, _, err = parser.Parse("load data infile 'aaa' into table aaa FIELDS  Enclosed by '\\\\b' Escaped by '\\\\b' ;", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1083]Field separator argument is not what is expected; check the manual")
+	_, _, err = p.Parse("load data infile 'aaa' into table aaa FIELDS  Enclosed by '\\\\b' Escaped by '\\\\b' ;", "", "")
+	require.EqualError(t, err, "[parser:1083]Field separator argument is not what is expected; check the manual")
 
-	_, _, err = parser.Parse("ALTER DATABASE `` CHARACTER SET = ''", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: ''")
+	_, _, err = p.Parse("ALTER DATABASE `` CHARACTER SET = ''", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: ''")
 
-	_, _, err = parser.Parse("ALTER DATABASE t CHARACTER SET = ''", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: ''")
+	_, _, err = p.Parse("ALTER DATABASE t CHARACTER SET = ''", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: ''")
 
-	_, _, err = parser.Parse("ALTER SCHEMA t CHARACTER SET = 'SOME_INVALID_CHARSET'", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: 'SOME_INVALID_CHARSET'")
+	_, _, err = p.Parse("ALTER SCHEMA t CHARACTER SET = 'SOME_INVALID_CHARSET'", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: 'SOME_INVALID_CHARSET'")
 
-	_, _, err = parser.Parse("ALTER DATABASE t COLLATE = ''", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1273]Unknown collation: ''")
+	_, _, err = p.Parse("ALTER DATABASE t COLLATE = ''", "", "")
+	require.EqualError(t, err, "[ddl:1273]Unknown collation: ''")
 
-	_, _, err = parser.Parse("ALTER SCHEMA t COLLATE = 'SOME_INVALID_COLLATION'", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1273]Unknown collation: 'SOME_INVALID_COLLATION'")
+	_, _, err = p.Parse("ALTER SCHEMA t COLLATE = 'SOME_INVALID_COLLATION'", "", "")
+	require.EqualError(t, err, "[ddl:1273]Unknown collation: 'SOME_INVALID_COLLATION'")
 
-	_, _, err = parser.Parse("ALTER DATABASE CHARSET = 'utf8mb4' COLLATE = 'utf8_bin'", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 24 near \"= 'utf8mb4' COLLATE = 'utf8_bin'\" ")
+	_, _, err = p.Parse("ALTER DATABASE CHARSET = 'utf8mb4' COLLATE = 'utf8_bin'", "", "")
+	require.EqualError(t, err, "line 1 column 24 near \"= 'utf8mb4' COLLATE = 'utf8_bin'\" ")
 
-	_, _, err = parser.Parse("ALTER DATABASE t ENCRYPTION = ''", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1525]Incorrect argument (should be Y or N) value: ''")
+	_, _, err = p.Parse("ALTER DATABASE t ENCRYPTION = ''", "", "")
+	require.EqualError(t, err, "[parser:1525]Incorrect argument (should be Y or N) value: ''")
 
-	_, _, err = parser.Parse("ALTER DATABASE", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 14 near \"\" ")
+	_, _, err = p.Parse("ALTER DATABASE", "", "")
+	require.EqualError(t, err, "line 1 column 14 near \"\" ")
 
-	_, _, err = parser.Parse("ALTER SCHEMA `ANY_DB_NAME`", "", "")
-	c.Assert(err.Error(), Equals, "line 1 column 26 near \"\" ")
+	_, _, err = p.Parse("ALTER SCHEMA `ANY_DB_NAME`", "", "")
+	require.EqualError(t, err, "line 1 column 26 near \"\" ")
 
-	_, _, err = parser.Parse("alter table t partition by range FIELDS(a)", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1492]For RANGE partitions each partition must be defined")
+	_, _, err = p.Parse("alter table t partition by range FIELDS(a)", "", "")
+	require.EqualError(t, err, "[ddl:1492]For RANGE partitions each partition must be defined")
 
-	_, _, err = parser.Parse("alter table t partition by list FIELDS(a)", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1492]For LIST partitions each partition must be defined")
+	_, _, err = p.Parse("alter table t partition by list FIELDS(a)", "", "")
+	require.EqualError(t, err, "[ddl:1492]For LIST partitions each partition must be defined")
 
-	_, _, err = parser.Parse("alter table t partition by list FIELDS(a)", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1492]For LIST partitions each partition must be defined")
+	_, _, err = p.Parse("alter table t partition by list FIELDS(a)", "", "")
+	require.EqualError(t, err, "[ddl:1492]For LIST partitions each partition must be defined")
 
-	_, _, err = parser.Parse("alter table t partition by list FIELDS(a,b,c)", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1492]For LIST partitions each partition must be defined")
+	_, _, err = p.Parse("alter table t partition by list FIELDS(a,b,c)", "", "")
+	require.EqualError(t, err, "[ddl:1492]For LIST partitions each partition must be defined")
 
-	_, _, err = parser.Parse("alter table t lock = first", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1801]Unknown LOCK type 'first'")
+	_, _, err = p.Parse("alter table t lock = first", "", "")
+	require.EqualError(t, err, "[parser:1801]Unknown LOCK type 'first'")
 
-	_, _, err = parser.Parse("alter table t lock = start", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1801]Unknown LOCK type 'start'")
+	_, _, err = p.Parse("alter table t lock = start", "", "")
+	require.EqualError(t, err, "[parser:1801]Unknown LOCK type 'start'")
 
-	_, _, err = parser.Parse("alter table t lock = commit", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1801]Unknown LOCK type 'commit'")
+	_, _, err = p.Parse("alter table t lock = commit", "", "")
+	require.EqualError(t, err, "[parser:1801]Unknown LOCK type 'commit'")
 
-	_, _, err = parser.Parse("alter table t lock = binlog", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1801]Unknown LOCK type 'binlog'")
+	_, _, err = p.Parse("alter table t lock = binlog", "", "")
+	require.EqualError(t, err, "[parser:1801]Unknown LOCK type 'binlog'")
 
-	_, _, err = parser.Parse("alter table t lock = randomStr123", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1801]Unknown LOCK type 'randomStr123'")
+	_, _, err = p.Parse("alter table t lock = randomStr123", "", "")
+	require.EqualError(t, err, "[parser:1801]Unknown LOCK type 'randomStr123'")
 
-	_, _, err = parser.Parse("create table t (a longtext unicode)", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: 'ucs2'")
+	_, _, err = p.Parse("create table t (a longtext unicode)", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: 'ucs2'")
 
-	_, _, err = parser.Parse("create table t (a long byte, b text unicode)", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: 'ucs2'")
+	_, _, err = p.Parse("create table t (a long byte, b text unicode)", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: 'ucs2'")
 
-	_, _, err = parser.Parse("create table t (a long ascii, b long unicode)", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: 'ucs2'")
+	_, _, err = p.Parse("create table t (a long ascii, b long unicode)", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: 'ucs2'")
 
-	_, _, err = parser.Parse("create table t (a text unicode, b mediumtext ascii, c int)", "", "")
-	c.Assert(err.Error(), Equals, "[parser:1115]Unknown character set: 'ucs2'")
+	_, _, err = p.Parse("create table t (a text unicode, b mediumtext ascii, c int)", "", "")
+	require.EqualError(t, err, "[parser:1115]Unknown character set: 'ucs2'")
 
-	_, _, err = parser.Parse("select 1 collate some_unknown_collation", "", "")
-	c.Assert(err.Error(), Equals, "[ddl:1273]Unknown collation: 'some_unknown_collation'")
+	_, _, err = p.Parse("select 1 collate some_unknown_collation", "", "")
+	require.EqualError(t, err, "[ddl:1273]Unknown collation: 'some_unknown_collation'")
 }
 
-func (s *testParserSuite) TestOptimizerHints(c *C) {
-	parser := parser.New()
+func TestOptimizerHints(t *testing.T) {
+	p := parser.New()
 	// Test USE_INDEX
-	stmt, _, err := parser.Parse("select /*+ USE_INDEX(T1,T2), use_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err := p.Parse("select /*+ USE_INDEX(T1,T2), use_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt := stmt[0].(*ast.SelectStmt)
 
 	hints := selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_index")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "use_index", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 1)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Len(t, hints[0].Indexes, 1)
+	require.Equal(t, "t2", hints[0].Indexes[0].L)
 
-	c.Assert(hints[1].HintName.L, Equals, "use_index")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "t4")
+	require.Equal(t, "use_index", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 1)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Len(t, hints[1].Indexes, 1)
+	require.Equal(t, "t4", hints[1].Indexes[0].L)
+
+	// Test FORCE_INDEX
+	stmt, _, err = p.Parse("select /*+ FORCE_INDEX(T1,T2), force_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 2)
+	require.Equal(t, "force_index", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 1)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Len(t, hints[0].Indexes, 1)
+	require.Equal(t, "t2", hints[0].Indexes[0].L)
+
+	require.Equal(t, "force_index", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 1)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Len(t, hints[1].Indexes, 1)
+	require.Equal(t, "t4", hints[1].Indexes[0].L)
 
 	// Test IGNORE_INDEX
-	stmt, _, err = parser.Parse("select /*+ IGNORE_INDEX(T1,T2), ignore_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ IGNORE_INDEX(T1,T2), ignore_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "ignore_index")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "ignore_index", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 1)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Len(t, hints[0].Indexes, 1)
+	require.Equal(t, "t2", hints[0].Indexes[0].L)
 
-	c.Assert(hints[1].HintName.L, Equals, "ignore_index")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "t4")
+	require.Equal(t, "ignore_index", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 1)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Len(t, hints[1].Indexes, 1)
+	require.Equal(t, "t4", hints[1].Indexes[0].L)
 
 	// Test TIDB_SMJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_SMJ(T1,t2), tidb_smj(T3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ TIDB_SMJ(T1,t2), tidb_smj(T3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_smj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "tidb_smj", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "tidb_smj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "tidb_smj", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test MERGE_JOIN
-	stmt, _, err = parser.Parse("select /*+ MERGE_JOIN(t1, T2), merge_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ MERGE_JOIN(t1, T2), merge_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "merge_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "merge_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "merge_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "merge_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
+
+	// TEST BROADCAST_JOIN
+	stmt, _, err = p.Parse("select /*+ BROADCAST_JOIN(t1, T2), broadcast_join(t3, t4), BROADCAST_JOIN_LOCAL(t2) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 3)
+	require.Equal(t, "broadcast_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
+
+	require.Equal(t, "broadcast_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
+
+	require.Equal(t, "broadcast_join_local", hints[2].HintName.L)
+	require.Len(t, hints[2].Tables, 1)
+	require.Equal(t, "t2", hints[2].Tables[0].TableName.L)
 
 	// Test TIDB_INLJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_INLJ(t1, T2), tidb_inlj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ TIDB_INLJ(t1, T2), tidb_inlj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_inlj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "tidb_inlj", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "tidb_inlj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "tidb_inlj", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test INL_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_JOIN(t1, T2), inl_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ INL_JOIN(t1, T2), inl_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "inl_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "inl_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "inl_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test INL_HASH_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_HASH_JOIN(t1, T2), inl_hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ INL_HASH_JOIN(t1, T2), inl_hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "inl_hash_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "inl_hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "inl_hash_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test INL_MERGE_JOIN
-	stmt, _, err = parser.Parse("select /*+ INL_MERGE_JOIN(t1, T2), inl_merge_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ INL_MERGE_JOIN(t1, T2), inl_merge_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "inl_merge_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "inl_merge_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "inl_merge_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "inl_merge_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test TIDB_HJ
-	stmt, _, err = parser.Parse("select /*+ TIDB_HJ(t1, T2), tidb_hj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ TIDB_HJ(t1, T2), tidb_hj(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "tidb_hj")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "tidb_hj", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "tidb_hj")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "tidb_hj", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test HASH_JOIN
-	stmt, _, err = parser.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 2)
+	require.Equal(t, "hash_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "hash_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
 	// Test HASH_JOIN with SWAP_JOIN_INPUTS/NO_SWAP_JOIN_INPUTS
 	// t1 for build, t4 for probe
-	stmt, _, err = parser.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4), SWAP_JOIN_INPUTS(t1), NO_SWAP_JOIN_INPUTS(t4)  */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ HASH_JOIN(t1, T2), hash_join(t3, t4), SWAP_JOIN_INPUTS(t1), NO_SWAP_JOIN_INPUTS(t4)  */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 4)
-	c.Assert(hints[0].HintName.L, Equals, "hash_join")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
+	require.Len(t, hints, 4)
+	require.Equal(t, "hash_join", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "hash_join")
-	c.Assert(hints[1].Tables, HasLen, 2)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[1].Tables[1].TableName.L, Equals, "t4")
+	require.Equal(t, "hash_join", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 2)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
+	require.Equal(t, "t4", hints[1].Tables[1].TableName.L)
 
-	c.Assert(hints[2].HintName.L, Equals, "swap_join_inputs")
-	c.Assert(hints[2].Tables, HasLen, 1)
-	c.Assert(hints[2].Tables[0].TableName.L, Equals, "t1")
+	require.Equal(t, "swap_join_inputs", hints[2].HintName.L)
+	require.Len(t, hints[2].Tables, 1)
+	require.Equal(t, "t1", hints[2].Tables[0].TableName.L)
 
-	c.Assert(hints[3].HintName.L, Equals, "no_swap_join_inputs")
-	c.Assert(hints[3].Tables, HasLen, 1)
-	c.Assert(hints[3].Tables[0].TableName.L, Equals, "t4")
+	require.Equal(t, "no_swap_join_inputs", hints[3].HintName.L)
+	require.Len(t, hints[3].Tables, 1)
+	require.Equal(t, "t4", hints[3].Tables[0].TableName.L)
 
 	// Test MAX_EXECUTION_TIME
 	queries := []string{
@@ -3319,185 +3966,226 @@ func (s *testParserSuite) TestOptimizerHints(c *C) {
 		"SELECT /*+ MAX_EXECUTION_TIME(1000) */ 1 FROM DUAL",
 	}
 	for i, query := range queries {
-		stmt, _, err = parser.Parse(query, "", "")
-		c.Assert(err, IsNil)
+		stmt, _, err = p.Parse(query, "", "")
+		require.NoError(t, err)
 		selectStmt = stmt[0].(*ast.SelectStmt)
 		hints = selectStmt.TableHints
-		c.Assert(len(hints), Equals, 1)
-		c.Assert(hints[0].HintName.L, Equals, "max_execution_time", Commentf("case", i))
-		c.Assert(hints[0].HintData.(uint64), Equals, uint64(1000))
+		require.Len(t, hints, 1)
+		require.Equal(t, "max_execution_time", hints[0].HintName.L, "case", i)
+		require.Equal(t, uint64(1000), hints[0].HintData.(uint64))
+	}
+
+	// Test NTH_PLAN
+	queries = []string{
+		"SELECT /*+ NTH_PLAN(10) */ * FROM t1 INNER JOIN t2 where t1.c1 = t2.c1",
+		"SELECT /*+ NTH_PLAN(10) */ 1",
+		"SELECT /*+ NTH_PLAN(10) */ SLEEP(20)",
+		"SELECT /*+ NTH_PLAN(10) */ 1 FROM DUAL",
+	}
+	for i, query := range queries {
+		stmt, _, err = p.Parse(query, "", "")
+		require.NoError(t, err)
+		selectStmt = stmt[0].(*ast.SelectStmt)
+		hints = selectStmt.TableHints
+		require.Len(t, hints, 1)
+		require.Equal(t, "nth_plan", hints[0].HintName.L, "case", i)
+		require.Equal(t, int64(10), hints[0].HintData.(int64))
 	}
 
 	// Test USE_INDEX_MERGE
-	stmt, _, err = parser.Parse("select /*+ USE_INDEX_MERGE(t1, c1), use_index_merge(t2, c1), use_index_merge(t3, c1, primary, c2) */ c1, c2 from t1, t2, t3 where t1.c1 = t2.c1 and t3.c2 = t1.c2", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ USE_INDEX_MERGE(t1, c1), use_index_merge(t2, c1), use_index_merge(t3, c1, primary, c2) */ c1, c2 from t1, t2, t3 where t1.c1 = t2.c1 and t3.c2 = t1.c2", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 3)
-	c.Assert(hints[0].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[0].Tables, HasLen, 1)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Indexes, HasLen, 1)
-	c.Assert(hints[0].Indexes[0].L, Equals, "c1")
+	require.Len(t, hints, 3)
+	require.Equal(t, "use_index_merge", hints[0].HintName.L)
+	require.Len(t, hints[0].Tables, 1)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Len(t, hints[0].Indexes, 1)
+	require.Equal(t, "c1", hints[0].Indexes[0].L)
 
-	c.Assert(hints[1].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t2")
-	c.Assert(hints[1].Indexes, HasLen, 1)
-	c.Assert(hints[1].Indexes[0].L, Equals, "c1")
+	require.Equal(t, "use_index_merge", hints[1].HintName.L)
+	require.Len(t, hints[1].Tables, 1)
+	require.Equal(t, "t2", hints[1].Tables[0].TableName.L)
+	require.Len(t, hints[1].Indexes, 1)
+	require.Equal(t, "c1", hints[1].Indexes[0].L)
 
-	c.Assert(hints[2].HintName.L, Equals, "use_index_merge")
-	c.Assert(hints[2].Tables, HasLen, 1)
-	c.Assert(hints[2].Tables[0].TableName.L, Equals, "t3")
-	c.Assert(hints[2].Indexes, HasLen, 3)
-	c.Assert(hints[2].Indexes[0].L, Equals, "c1")
-	c.Assert(hints[2].Indexes[1].L, Equals, "primary")
-	c.Assert(hints[2].Indexes[2].L, Equals, "c2")
+	require.Equal(t, "use_index_merge", hints[2].HintName.L)
+	require.Len(t, hints[2].Tables, 1)
+	require.Equal(t, "t3", hints[2].Tables[0].TableName.L)
+	require.Len(t, hints[2].Indexes, 3)
+	require.Equal(t, "c1", hints[2].Indexes[0].L)
+	require.Equal(t, "primary", hints[2].Indexes[1].L)
+	require.Equal(t, "c2", hints[2].Indexes[2].L)
 
 	// Test READ_FROM_STORAGE
-	stmt, _, err = parser.Parse("select /*+ READ_FROM_STORAGE(tiflash[t1, t2], tikv[t3]) */ c1, c2 from t1, t2, t1 t3 where t1.c1 = t2.c1 and t2.c1 = t3.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ READ_FROM_STORAGE(tiflash[t1, t2], tikv[t3]) */ c1, c2 from t1, t2, t1 t3 where t1.c1 = t2.c1 and t2.c1 = t3.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "read_from_storage")
-	c.Assert(hints[0].HintData.(model.CIStr).L, Equals, "tiflash")
-	c.Assert(hints[0].Tables, HasLen, 2)
-	c.Assert(hints[0].Tables[0].TableName.L, Equals, "t1")
-	c.Assert(hints[0].Tables[1].TableName.L, Equals, "t2")
-	c.Assert(hints[1].HintName.L, Equals, "read_from_storage")
-	c.Assert(hints[1].HintData.(model.CIStr).L, Equals, "tikv")
-	c.Assert(hints[1].Tables, HasLen, 1)
-	c.Assert(hints[1].Tables[0].TableName.L, Equals, "t3")
+	require.Len(t, hints, 2)
+	require.Equal(t, "read_from_storage", hints[0].HintName.L)
+	require.Equal(t, "tiflash", hints[0].HintData.(model.CIStr).L)
+	require.Len(t, hints[0].Tables, 2)
+	require.Equal(t, "t1", hints[0].Tables[0].TableName.L)
+	require.Equal(t, "t2", hints[0].Tables[1].TableName.L)
+	require.Equal(t, "read_from_storage", hints[1].HintName.L)
+	require.Equal(t, "tikv", hints[1].HintData.(model.CIStr).L)
+	require.Len(t, hints[1].Tables, 1)
+	require.Equal(t, "t3", hints[1].Tables[0].TableName.L)
 
 	// Test USE_TOJA
-	stmt, _, err = parser.Parse("select /*+ USE_TOJA(true), use_toja(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ USE_TOJA(true), use_toja(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_toja")
-	c.Assert(hints[0].HintData.(bool), IsTrue)
+	require.Len(t, hints, 2)
+	require.Equal(t, "use_toja", hints[0].HintName.L)
+	require.True(t, hints[0].HintData.(bool))
 
-	c.Assert(hints[1].HintName.L, Equals, "use_toja")
-	c.Assert(hints[1].HintData.(bool), IsFalse)
+	require.Equal(t, "use_toja", hints[1].HintName.L)
+	require.False(t, hints[1].HintData.(bool))
 
 	// Test IGNORE_PLAN_CACHE
-	stmt, _, err = parser.Parse("select /*+ IGNORE_PLAN_CACHE(), ignore_plan_cache() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ IGNORE_PLAN_CACHE(), ignore_plan_cache() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "ignore_plan_cache")
+	require.Len(t, hints, 2)
+	require.Equal(t, "ignore_plan_cache", hints[0].HintName.L)
+	require.Equal(t, "ignore_plan_cache", hints[1].HintName.L)
 
-	c.Assert(hints[1].HintName.L, Equals, "ignore_plan_cache")
+	stmt, _, err = p.Parse("delete /*+ IGNORE_PLAN_CACHE(), ignore_plan_cache() */ from t where a = 1", "", "")
+	require.NoError(t, err)
+	deleteStmt := stmt[0].(*ast.DeleteStmt)
+	hints = deleteStmt.TableHints
+	require.Len(t, hints, 2)
+	require.Equal(t, "ignore_plan_cache", hints[0].HintName.L)
+	require.Equal(t, "ignore_plan_cache", hints[1].HintName.L)
+
+	stmt, _, err = p.Parse("update /*+  IGNORE_PLAN_CACHE(), ignore_plan_cache() */ t set a = 1 where a = 10", "", "")
+	require.NoError(t, err)
+	updateStmt := stmt[0].(*ast.UpdateStmt)
+	hints = updateStmt.TableHints
+	require.Len(t, hints, 2)
+	require.Equal(t, "ignore_plan_cache", hints[0].HintName.L)
+	require.Equal(t, "ignore_plan_cache", hints[1].HintName.L)
 
 	// Test USE_CASCADES
-	stmt, _, err = parser.Parse("select /*+ USE_CASCADES(true), use_cascades(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ USE_CASCADES(true), use_cascades(false) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_cascades")
-	c.Assert(hints[0].HintData.(bool), IsTrue)
+	require.Len(t, hints, 2)
+	require.Equal(t, "use_cascades", hints[0].HintName.L)
+	require.True(t, hints[0].HintData.(bool))
 
-	c.Assert(hints[1].HintName.L, Equals, "use_cascades")
-	c.Assert(hints[1].HintData.(bool), IsFalse)
+	require.Equal(t, "use_cascades", hints[1].HintName.L)
+	require.False(t, hints[1].HintData.(bool))
 
 	// Test USE_PLAN_CACHE
-	stmt, _, err = parser.Parse("select /*+ USE_PLAN_CACHE(), use_plan_cache() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ USE_PLAN_CACHE(), use_plan_cache() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "use_plan_cache")
-	c.Assert(hints[1].HintName.L, Equals, "use_plan_cache")
+	require.Len(t, hints, 2)
+	require.Equal(t, "use_plan_cache", hints[0].HintName.L)
+	require.Equal(t, "use_plan_cache", hints[1].HintName.L)
 
 	// Test QUERY_TYPE
-	stmt, _, err = parser.Parse("select /*+ QUERY_TYPE(OLAP), query_type(OLTP) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ QUERY_TYPE(OLAP), query_type(OLTP) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "query_type")
-	c.Assert(hints[0].HintData.(model.CIStr).L, Equals, "olap")
-	c.Assert(hints[1].HintName.L, Equals, "query_type")
-	c.Assert(hints[1].HintData.(model.CIStr).L, Equals, "oltp")
+	require.Len(t, hints, 2)
+	require.Equal(t, "query_type", hints[0].HintName.L)
+	require.Equal(t, "olap", hints[0].HintData.(model.CIStr).L)
+	require.Equal(t, "query_type", hints[1].HintName.L)
+	require.Equal(t, "oltp", hints[1].HintData.(model.CIStr).L)
 
 	// Test MEMORY_QUOTA
-	stmt, _, err = parser.Parse("select /*+ MEMORY_QUOTA(1 MB), memory_quota(1 GB) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ MEMORY_QUOTA(1 MB), memory_quota(1 GB) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "memory_quota")
-	c.Assert(hints[0].HintData.(int64), Equals, int64(1024*1024))
-	c.Assert(hints[1].HintName.L, Equals, "memory_quota")
-	c.Assert(hints[1].HintData.(int64), Equals, int64(1024*1024*1024))
+	require.Len(t, hints, 2)
+	require.Equal(t, "memory_quota", hints[0].HintName.L)
+	require.Equal(t, int64(1024*1024), hints[0].HintData.(int64))
+	require.Equal(t, "memory_quota", hints[1].HintName.L)
+	require.Equal(t, int64(1024*1024*1024), hints[1].HintData.(int64))
 
-	stmt, _, err = parser.Parse("select /*+ MEMORY_QUOTA(18446744073709551612 MB), memory_quota(8689934592 GB) */ 1", "", "")
-	c.Assert(err, IsNil)
+	_, _, err = p.Parse("select /*+ MEMORY_QUOTA(18446744073709551612 MB), memory_quota(8689934592 GB) */ 1", "", "")
+	require.NoError(t, err)
 
 	// Test HASH_AGG
-	stmt, _, err = parser.Parse("select /*+ HASH_AGG(), hash_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ HASH_AGG(), hash_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "hash_agg")
-	c.Assert(hints[1].HintName.L, Equals, "hash_agg")
+	require.Len(t, hints, 2)
+	require.Equal(t, "hash_agg", hints[0].HintName.L)
+	require.Equal(t, "hash_agg", hints[1].HintName.L)
 
 	// Test STREAM_AGG
-	stmt, _, err = parser.Parse("select /*+ STREAM_AGG(), stream_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ STREAM_AGG(), stream_agg() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "stream_agg")
-	c.Assert(hints[1].HintName.L, Equals, "stream_agg")
+	require.Len(t, hints, 2)
+	require.Equal(t, "stream_agg", hints[0].HintName.L)
+	require.Equal(t, "stream_agg", hints[1].HintName.L)
 
 	// Test AGG_TO_COP
-	stmt, _, err = parser.Parse("select /*+ AGG_TO_COP(), agg_to_cop() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ AGG_TO_COP(), agg_to_cop() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "agg_to_cop")
-	c.Assert(hints[1].HintName.L, Equals, "agg_to_cop")
+	require.Len(t, hints, 2)
+	require.Equal(t, "agg_to_cop", hints[0].HintName.L)
+	require.Equal(t, "agg_to_cop", hints[1].HintName.L)
 
 	// Test NO_INDEX_MERGE
-	stmt, _, err = parser.Parse("select /*+ NO_INDEX_MERGE(), no_index_merge() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ NO_INDEX_MERGE(), no_index_merge() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "no_index_merge")
-	c.Assert(hints[1].HintName.L, Equals, "no_index_merge")
+	require.Len(t, hints, 2)
+	require.Equal(t, "no_index_merge", hints[0].HintName.L)
+	require.Equal(t, "no_index_merge", hints[1].HintName.L)
 
 	// Test READ_CONSISTENT_REPLICA
-	stmt, _, err = parser.Parse("select /*+ READ_CONSISTENT_REPLICA(), read_consistent_replica() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	c.Assert(err, IsNil)
+	stmt, _, err = p.Parse("select /*+ READ_CONSISTENT_REPLICA(), read_consistent_replica() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
 
 	hints = selectStmt.TableHints
-	c.Assert(hints, HasLen, 2)
-	c.Assert(hints[0].HintName.L, Equals, "read_consistent_replica")
-	c.Assert(hints[1].HintName.L, Equals, "read_consistent_replica")
+	require.Len(t, hints, 2)
+	require.Equal(t, "read_consistent_replica", hints[0].HintName.L)
+	require.Equal(t, "read_consistent_replica", hints[1].HintName.L)
+
+	// Test LIMIT_TO_COP
+	stmt, _, err = p.Parse("select /*+ LIMIT_TO_COP(), limit_to_cop() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 2)
+	require.Equal(t, "limit_to_cop", hints[0].HintName.L)
+	require.Equal(t, "limit_to_cop", hints[1].HintName.L)
 }
 
-func (s *testParserSuite) TestType(c *C) {
+func TestType(t *testing.T) {
 	table := []testCase{
 		// for time fsp
 		{"CREATE TABLE t( c1 TIME(2), c2 DATETIME(2), c3 TIMESTAMP(2) );", true, "CREATE TABLE `t` (`c1` TIME(2),`c2` DATETIME(2),`c3` TIMESTAMP(2))"},
@@ -3517,6 +4205,10 @@ func (s *testParserSuite) TestType(c *C) {
 
 		// for enum and set type
 		{"create table t (c1 enum('a', 'b'), c2 set('a', 'b'))", true, "CREATE TABLE `t` (`c1` ENUM('a','b'),`c2` SET('a','b'))"},
+		{"create table t (c1 enum('a  ', 'b\t'), c2 set('a  ', 'b\t'))", true, "CREATE TABLE `t` (`c1` ENUM('a','b\t'),`c2` SET('a','b\t'))"},
+		{"create table t (c1 enum('a', 'b') binary, c2 set('a', 'b') binary)", true, "CREATE TABLE `t` (`c1` ENUM('a','b') BINARY,`c2` SET('a','b') BINARY)"},
+		{"create table t (c1 enum(0x61, 'b'), c2 set(0x61, 'b'))", true, "CREATE TABLE `t` (`c1` ENUM('a','b'),`c2` SET('a','b'))"},
+		{"create table t (c1 enum(0b01100001, 'b'), c2 set(0b01100001, 'b'))", true, "CREATE TABLE `t` (`c1` ENUM('a','b'),`c2` SET('a','b'))"},
 		{"create table t (c1 enum)", false, ""},
 		{"create table t (c1 set)", false, ""},
 
@@ -3533,10 +4225,10 @@ func (s *testParserSuite) TestType(c *C) {
 		// for json type
 		{`create table t (a JSON);`, true, "CREATE TABLE `t` (`a` JSON)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestPrivilege(c *C) {
+func TestPrivilege(t *testing.T) {
 	table := []testCase{
 		// for create user
 		{`CREATE USER 'ttt' REQUIRE X509;`, true, "CREATE USER `ttt`@`%` REQUIRE X509"},
@@ -3547,7 +4239,7 @@ func (s *testParserSuite) TestPrivilege(c *C) {
 		{`CREATE USER 'ttt' REQUIRE SAN 'DNS:mysql-user, URI:spiffe://example.org/myservice'`, true, "CREATE USER `ttt`@`%` REQUIRE SAN 'DNS:mysql-user, URI:spiffe://example.org/myservice'"},
 		{`CREATE USER 'ttt' WITH MAX_QUERIES_PER_HOUR 2;`, true, "CREATE USER `ttt`@`%` WITH MAX_QUERIES_PER_HOUR 2"},
 		{`CREATE USER 'ttt'@'localhost' REQUIRE NONE WITH MAX_QUERIES_PER_HOUR 1 MAX_UPDATES_PER_HOUR 10 PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK;`, true, "CREATE USER `ttt`@`localhost` REQUIRE NONE WITH MAX_QUERIES_PER_HOUR 1 MAX_UPDATES_PER_HOUR 10 PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"},
-		{`CREATE USER 'u1'@'%' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK ;`, true, "CREATE USER `u1`@`%` IDENTIFIED BY PASSWORD '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"},
+		{`CREATE USER 'u1'@'%' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK ;`, true, "CREATE USER `u1`@`%` IDENTIFIED WITH 'mysql_native_password' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"},
 		{`CREATE USER 'test'`, true, "CREATE USER `test`@`%`"},
 		{`CREATE USER test`, true, "CREATE USER `test`@`%`"},
 		{"CREATE USER `test`", true, "CREATE USER `test`@`%`"},
@@ -3571,21 +4263,26 @@ func (s *testParserSuite) TestPrivilege(c *C) {
 		{"create user 'test@localhost' password expire never;", true, "CREATE USER `test@localhost`@`%` PASSWORD EXPIRE NEVER"},
 		{"create user 'test@localhost' password expire default;", true, "CREATE USER `test@localhost`@`%` PASSWORD EXPIRE DEFAULT"},
 		{"create user 'test@localhost' password expire interval 3 day;", true, "CREATE USER `test@localhost`@`%` PASSWORD EXPIRE INTERVAL 3 DAY"},
+		{"CREATE USER 'sha_test'@'localhost' IDENTIFIED WITH 'caching_sha2_password' BY 'sha_test'", true, "CREATE USER `sha_test`@`localhost` IDENTIFIED WITH 'caching_sha2_password' BY 'sha_test'"},
+		{"CREATE USER 'sha_test3'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS 0x24412430303524255B03496C662C1055127B3B654A2F04207D01485276703644704B76303247474564416A516662346C5868646D32764C6B514F43585A473779565947514F34", true, "CREATE USER `sha_test3`@`localhost` IDENTIFIED WITH 'caching_sha2_password' AS '$A$005$%[\x03Ilf,\x10U\x12{;eJ/\x04 }\x01HRvp6DpKv02GGEdAjQfb4lXhdm2vLkQOCXZG7yVYGQO4'"},
+		{"CREATE USER 'sha_test4'@'localhost' IDENTIFIED WITH 'caching_sha2_password' AS '$A$005$%[\x03Ilf,\x10U\x12{;eJ/\x04 }\x01HRvp6DpKv02GGEdAjQfb4lXhdm2vLkQOCXZG7yVYGQO4'", true, "CREATE USER `sha_test4`@`localhost` IDENTIFIED WITH 'caching_sha2_password' AS '$A$005$%[\x03Ilf,\x10U\x12{;eJ/\x04 }\x01HRvp6DpKv02GGEdAjQfb4lXhdm2vLkQOCXZG7yVYGQO4'"},
+		{"CREATE USER 'nopwd_native'@'localhost' IDENTIFIED WITH 'mysql_native_password'", true, "CREATE USER `nopwd_native`@`localhost` IDENTIFIED WITH 'mysql_native_password'"},
+		{"CREATE USER 'nopwd_sha'@'localhost' IDENTIFIED WITH 'caching_sha2_password'", true, "CREATE USER `nopwd_sha`@`localhost` IDENTIFIED WITH 'caching_sha2_password'"},
 		{"CREATE ROLE `test-role`, `role1`@'localhost'", true, "CREATE ROLE `test-role`@`%`, `role1`@`localhost`"},
 		{"CREATE ROLE `test-role`", true, "CREATE ROLE `test-role`@`%`"},
 		{"CREATE ROLE role1", true, "CREATE ROLE `role1`@`%`"},
 		{"CREATE ROLE `role1`@'localhost'", true, "CREATE ROLE `role1`@`localhost`"},
-		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password", true, "CREATE USER `bug19354014user`@`%`"},
-		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password by 'new-password'", true, "CREATE USER `bug19354014user`@`%` IDENTIFIED BY 'new-password'"},
-		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password as 'hashstring'", true, "CREATE USER `bug19354014user`@`%` IDENTIFIED BY PASSWORD 'hashstring'"},
+		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password", true, "CREATE USER `bug19354014user`@`%` IDENTIFIED WITH 'mysql_native_password'"},
+		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password by 'new-password'", true, "CREATE USER `bug19354014user`@`%` IDENTIFIED WITH 'mysql_native_password' BY 'new-password'"},
+		{"create user 'bug19354014user'@'%' identified WITH mysql_native_password as 'hashstring'", true, "CREATE USER `bug19354014user`@`%` IDENTIFIED WITH 'mysql_native_password' AS 'hashstring'"},
 		{`CREATE USER IF NOT EXISTS 'root'@'localhost' IDENTIFIED BY 'new-password'`, true, "CREATE USER IF NOT EXISTS `root`@`localhost` IDENTIFIED BY 'new-password'"},
 		{`CREATE USER 'root'@'localhost' IDENTIFIED BY 'new-password'`, true, "CREATE USER `root`@`localhost` IDENTIFIED BY 'new-password'"},
-		{`CREATE USER 'root'@'localhost' IDENTIFIED BY PASSWORD 'hashstring'`, true, "CREATE USER `root`@`localhost` IDENTIFIED BY PASSWORD 'hashstring'"},
-		{`CREATE USER 'root'@'localhost' IDENTIFIED BY 'new-password', 'root'@'127.0.0.1' IDENTIFIED BY PASSWORD 'hashstring'`, true, "CREATE USER `root`@`localhost` IDENTIFIED BY 'new-password', `root`@`127.0.0.1` IDENTIFIED BY PASSWORD 'hashstring'"},
+		{`CREATE USER 'root'@'localhost' IDENTIFIED BY PASSWORD 'hashstring'`, true, "CREATE USER `root`@`localhost` IDENTIFIED WITH 'mysql_native_password' AS 'hashstring'"},
+		{`CREATE USER 'root'@'localhost' IDENTIFIED BY 'new-password', 'root'@'127.0.0.1' IDENTIFIED BY PASSWORD 'hashstring'`, true, "CREATE USER `root`@`localhost` IDENTIFIED BY 'new-password', `root`@`127.0.0.1` IDENTIFIED WITH 'mysql_native_password' AS 'hashstring'"},
 		{`ALTER USER IF EXISTS 'root'@'localhost' IDENTIFIED BY 'new-password'`, true, "ALTER USER IF EXISTS `root`@`localhost` IDENTIFIED BY 'new-password'"},
 		{`ALTER USER 'root'@'localhost' IDENTIFIED BY 'new-password'`, true, "ALTER USER `root`@`localhost` IDENTIFIED BY 'new-password'"},
-		{`ALTER USER 'root'@'localhost' IDENTIFIED BY PASSWORD 'hashstring'`, true, "ALTER USER `root`@`localhost` IDENTIFIED BY PASSWORD 'hashstring'"},
-		{`ALTER USER 'root'@'localhost' IDENTIFIED BY 'new-password', 'root'@'127.0.0.1' IDENTIFIED BY PASSWORD 'hashstring'`, true, "ALTER USER `root`@`localhost` IDENTIFIED BY 'new-password', `root`@`127.0.0.1` IDENTIFIED BY PASSWORD 'hashstring'"},
+		{`ALTER USER 'root'@'localhost' IDENTIFIED BY PASSWORD 'hashstring'`, true, "ALTER USER `root`@`localhost` IDENTIFIED WITH 'mysql_native_password' AS 'hashstring'"},
+		{`ALTER USER 'root'@'localhost' IDENTIFIED BY 'new-password', 'root'@'127.0.0.1' IDENTIFIED BY PASSWORD 'hashstring'`, true, "ALTER USER `root`@`localhost` IDENTIFIED BY 'new-password', `root`@`127.0.0.1` IDENTIFIED WITH 'mysql_native_password' AS 'hashstring'"},
 		{`ALTER USER USER() IDENTIFIED BY 'new-password'`, true, "ALTER USER USER() IDENTIFIED BY 'new-password'"},
 		{`ALTER USER IF EXISTS USER() IDENTIFIED BY 'new-password'`, true, "ALTER USER IF EXISTS USER() IDENTIFIED BY 'new-password'"},
 		{"alter user 'test@localhost' password expire;", true, "ALTER USER `test@localhost`@`%` PASSWORD EXPIRE"},
@@ -3603,6 +4300,9 @@ func (s *testParserSuite) TestPrivilege(c *C) {
 		{"ALTER USER 'ttt'@'localhost' REQUIRE NONE WITH MAX_QUERIES_PER_HOUR 1 MAX_UPDATES_PER_HOUR 10 PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK;", true, "ALTER USER `ttt`@`localhost` REQUIRE NONE WITH MAX_QUERIES_PER_HOUR 1 MAX_UPDATES_PER_HOUR 10 PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK"},
 		{`DROP USER 'root'@'localhost', 'root1'@'localhost'`, true, "DROP USER `root`@`localhost`, `root1`@`localhost`"},
 		{`DROP USER IF EXISTS 'root'@'localhost'`, true, "DROP USER IF EXISTS `root`@`localhost`"},
+		{`RENAME USER 'root'@'localhost' TO 'root'@'%'`, true, "RENAME USER `root`@`localhost` TO `root`@`%`"},
+		{`RENAME USER 'fred' TO 'barry'`, true, "RENAME USER `fred`@`%` TO `barry`@`%`"},
+		{`RENAME USER u1 to u2, u3 to u4`, true, "RENAME USER `u1`@`%` TO `u2`@`%`, `u3`@`%` TO `u4`@`%`"},
 		{`DROP ROLE 'role'@'localhost', 'role1'@'localhost'`, true, "DROP ROLE `role`@`localhost`, `role1`@`localhost`"},
 		{`DROP ROLE 'administrator', 'developer';`, true, "DROP ROLE `administrator`@`%`, `developer`@`%`"},
 		{`DROP ROLE IF EXISTS 'role'@'localhost'`, true, "DROP ROLE IF EXISTS `role`@`localhost`"},
@@ -3625,13 +4325,24 @@ func (s *testParserSuite) TestPrivilege(c *C) {
 		{"GRANT SELECT (col1), INSERT (col1,col2) ON mydb.mytbl TO 'someuser'@'somehost';", true, "GRANT SELECT (`col1`), INSERT (`col1`,`col2`) ON `mydb`.`mytbl` TO `someuser`@`somehost`"},
 		{"grant all privileges on zabbix.* to 'zabbix'@'localhost' identified by 'password';", true, "GRANT ALL ON `zabbix`.* TO `zabbix`@`localhost` IDENTIFIED BY 'password'"},
 		{"GRANT SELECT ON test.* to 'test'", true, "GRANT SELECT ON `test`.* TO `test`@`%`"}, // For issue 2654.
-		{"grant PROCESS,usage, REPLICATION SLAVE, REPLICATION CLIENT on *.* to 'xxxxxxxxxx'@'%' identified by password 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'", true, "GRANT PROCESS /* UNSUPPORTED TYPE */ /* UNSUPPORTED TYPE */ /* UNSUPPORTED TYPE */ ON *.* TO `xxxxxxxxxx`@`%` IDENTIFIED BY PASSWORD 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'"}, // For issue 4865
-		{"/* rds internal mark */ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, RELOAD, PROCESS, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES,      EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT,      TRIGGER on *.* to 'root2'@'%' identified by password '*sdsadsdsadssadsadsadsadsada' with grant option", true, "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, RELOAD, PROCESS, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE /* UNSUPPORTED TYPE */ /* UNSUPPORTED TYPE */, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER ON *.* TO `root2`@`%` IDENTIFIED BY PASSWORD '*sdsadsdsadssadsadsadsadsada' WITH GRANT OPTION"},
+		{"grant PROCESS,usage, REPLICATION SLAVE, REPLICATION CLIENT on *.* to 'xxxxxxxxxx'@'%' identified by password 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'", true, "GRANT PROCESS, USAGE, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO `xxxxxxxxxx`@`%` IDENTIFIED WITH 'mysql_native_password' AS 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'"},
+		{"/* rds internal mark */ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, RELOAD, PROCESS, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES,      EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT,      TRIGGER on *.* to 'root2'@'%' identified by password '*sdsadsdsadssadsadsadsadsada' with grant option", true, "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, RELOAD, PROCESS, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER ON *.* TO `root2`@`%` IDENTIFIED WITH 'mysql_native_password' AS '*sdsadsdsadssadsadsadsadsada' WITH GRANT OPTION"},
 		{"GRANT 'role1', 'role2' TO 'user1'@'localhost', 'user2'@'localhost';", true, "GRANT `role1`@`%`, `role2`@`%` TO `user1`@`localhost`, `user2`@`localhost`"},
 		{"GRANT 'u1' TO 'u1';", true, "GRANT `u1`@`%` TO `u1`@`%`"},
+		{"GRANT 'app_read'@'%','app_write'@'%' TO 'rw_user1'@'localhost'", true, "GRANT `app_read`@`%`, `app_write`@`%` TO `rw_user1`@`localhost`"},
 		{"GRANT 'app_developer' TO 'dev1'@'localhost';", true, "GRANT `app_developer`@`%` TO `dev1`@`localhost`"},
 		{"GRANT SHUTDOWN ON *.* TO 'dev1'@'localhost';", true, "GRANT SHUTDOWN ON *.* TO `dev1`@`localhost`"},
 		{"GRANT CONFIG ON *.* TO 'dev1'@'localhost';", true, "GRANT CONFIG ON *.* TO `dev1`@`localhost`"},
+		{"GRANT CREATE ON *.* TO 'dev1'@'localhost';", true, "GRANT CREATE ON *.* TO `dev1`@`localhost`"},
+		{"GRANT CREATE TABLESPACE ON *.* TO 'dev1'@'localhost';", true, "GRANT CREATE TABLESPACE ON *.* TO `dev1`@`localhost`"},
+		{"GRANT EXECUTE ON FUNCTION db1.anomaly_score TO 'user1'@'domain-or-ip-address1'", true, "GRANT EXECUTE ON FUNCTION `db1`.`anomaly_score` TO `user1`@`domain-or-ip-address1`"},
+		{"GRANT EXECUTE ON PROCEDURE mydb.myproc TO 'someuser'@'somehost'", true, "GRANT EXECUTE ON PROCEDURE `mydb`.`myproc` TO `someuser`@`somehost`"},
+		{"GRANT APPLICATION_PASSWORD_ADMIN,AUDIT_ADMIN ON *.* TO 'root'@'localhost'", true, "GRANT APPLICATION_PASSWORD_ADMIN, AUDIT_ADMIN ON *.* TO `root`@`localhost`"},
+		{"GRANT LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO 'root'@'localhost'", true, "GRANT LOAD FROM S3, SELECT INTO S3, INVOKE LAMBDA, INVOKE SAGEMAKER, INVOKE COMPREHEND ON *.* TO `root`@`localhost`"},
+		{"GRANT PROXY ON 'localuser'@'localhost' TO 'externaluser'@'somehost'", true, "GRANT PROXY ON `localuser`@`localhost` TO `externaluser`@`somehost`"},
+		{"GRANT PROXY ON ''@'' TO 'root'@'localhost' WITH GRANT OPTION", true, "GRANT PROXY ON ``@`` TO `root`@`localhost` WITH GRANT OPTION"},
+		{"GRANT PROXY ON 'proxied_user' TO 'proxy_user1', 'proxy_user2'", true, "GRANT PROXY ON `proxied_user`@`%` TO `proxy_user1`@`%`, `proxy_user2`@`%`"},
+		{"grant grant option on *.* to u1", true, "GRANT GRANT OPTION ON *.* TO `u1`@`%`"}, // not typical syntax, but supported
 
 		// for revoke statement
 		{"REVOKE ALL ON db1.* FROM 'jeffrey'@'localhost';", true, "REVOKE ALL ON `db1`.* FROM `jeffrey`@`localhost`"},
@@ -3647,11 +4358,16 @@ func (s *testParserSuite) TestPrivilege(c *C) {
 		{"REVOKE 'role1', 'role2' FROM 'user1'@'localhost', 'user2'@'localhost';", true, "REVOKE `role1`@`%`, `role2`@`%` FROM `user1`@`localhost`, `user2`@`localhost`"},
 		{"REVOKE SHUTDOWN ON *.* FROM 'dev1'@'localhost';", true, "REVOKE SHUTDOWN ON *.* FROM `dev1`@`localhost`"},
 		{"REVOKE CONFIG ON *.* FROM 'dev1'@'localhost';", true, "REVOKE CONFIG ON *.* FROM `dev1`@`localhost`"},
+		{"REVOKE EXECUTE ON FUNCTION db.func FROM 'user'@'localhost'", true, "REVOKE EXECUTE ON FUNCTION `db`.`func` FROM `user`@`localhost`"},
+		{"REVOKE EXECUTE ON PROCEDURE db.func FROM 'user'@'localhost'", true, "REVOKE EXECUTE ON PROCEDURE `db`.`func` FROM `user`@`localhost`"},
+		{"REVOKE APPLICATION_PASSWORD_ADMIN,AUDIT_ADMIN ON *.* FROM 'root'@'localhost'", true, "REVOKE APPLICATION_PASSWORD_ADMIN, AUDIT_ADMIN ON *.* FROM `root`@`localhost`"},
+		{"revoke all privileges, grant option from u1", true, "REVOKE ALL, GRANT OPTION ON *.* FROM `u1`@`%`"},                             // special case syntax
+		{"revoke all privileges, grant option from u1, u2, u3", true, "REVOKE ALL, GRANT OPTION ON *.* FROM `u1`@`%`, `u2`@`%`, `u3`@`%`"}, // special case syntax
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestComment(c *C) {
+func TestComment(t *testing.T) {
 	table := []testCase{
 		{"create table t (c int comment 'comment')", true, "CREATE TABLE `t` (`c` INT COMMENT 'comment')"},
 		{"create table t (c int) comment = 'comment'", true, "CREATE TABLE `t` (`c` INT) COMMENT = 'comment'"},
@@ -3674,28 +4390,33 @@ func (s *testParserSuite) TestComment(c *C) {
 		{"create table t (subject int)", true, "CREATE TABLE `t` (`subject` INT)"},
 		{"create table t (x509 int)", true, "CREATE TABLE `t` (`x509` INT)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestCommentErrMsg(c *C) {
-	table := []testErrMsgCase{
-		{"delete from t where a = 7 or 1=1/*' and b = 'p'", false, errors.New("near '/*' and b = 'p'' at line 1")},
-		{"delete from t where a = 7 or\n 1=1/*' and b = 'p'", false, errors.New("near '/*' and b = 'p'' at line 2")},
-		{"select 1/*", false, errors.New("near '/*' at line 1")},
-		{"select 1/* comment */", false, nil},
+func TestParserErrMsg(t *testing.T) {
+	commentMsgCases := []testErrMsgCase{
+		{"delete from t where a = 7 or 1=1/*' and b = 'p'", errors.New("near '/*' and b = 'p'' at line 1")},
+		{"delete from t where a = 7 or\n 1=1/*' and b = 'p'", errors.New("near '/*' and b = 'p'' at line 2")},
+		{"select 1/*", errors.New("near '/*' at line 1")},
+		{"select 1/* comment */", nil},
 	}
-	s.RunErrMsgTest(c, table)
+	funcCallMsgCases := []testErrMsgCase{
+		{"select a.b()", nil},
+		{"SELECT foo.bar('baz');", nil},
+	}
+	RunErrMsgTest(t, commentMsgCases)
+	RunErrMsgTest(t, funcCallMsgCases)
 }
 
 type subqueryChecker struct {
 	text string
-	c    *C
+	t    *testing.T
 }
 
 // Enter implements ast.Visitor interface.
 func (sc *subqueryChecker) Enter(inNode ast.Node) (outNode ast.Node, skipChildren bool) {
 	if expr, ok := inNode.(*ast.SubqueryExpr); ok {
-		sc.c.Assert(expr.Query.Text(), Equals, sc.text)
+		require.Equal(sc.t, sc.text, expr.Query.Text())
 		return inNode, true
 	}
 	return inNode, false
@@ -3706,7 +4427,7 @@ func (sc *subqueryChecker) Leave(inNode ast.Node) (node ast.Node, ok bool) {
 	return inNode, true
 }
 
-func (s *testParserSuite) TestSubquery(c *C) {
+func TestSubquery(t *testing.T) {
 	table := []testCase{
 		// for compare subquery
 		{"SELECT 1 > (select 1)", true, "SELECT 1>(SELECT 1)"},
@@ -3722,8 +4443,22 @@ func (s *testParserSuite) TestSubquery(c *C) {
 		{"SELECT NOT EXISTS (select 1)", true, "SELECT NOT EXISTS (SELECT 1)"},
 		{"SELECT + NOT EXISTS (select 1)", false, ""},
 		{"SELECT - NOT EXISTS (select 1)", false, ""},
+		{"SELECT * FROM t where t.a in (select a from t limit 1, 10)", true, "SELECT * FROM `t` WHERE `t`.`a` IN (SELECT `a` FROM `t` LIMIT 1,10)"},
+		{"SELECT * FROM t where t.a in ((select a from t limit 1, 10))", true, "SELECT * FROM `t` WHERE `t`.`a` IN ((SELECT `a` FROM `t` LIMIT 1,10))"},
+		{"SELECT * FROM t where t.a in ((select a from t limit 1, 10), 1)", true, "SELECT * FROM `t` WHERE `t`.`a` IN ((SELECT `a` FROM `t` LIMIT 1,10),1)"},
+		{"select * from ((select a from t) t1 join t t2) join t3", true, "SELECT * FROM ((SELECT `a` FROM `t`) AS `t1` JOIN `t` AS `t2`) JOIN `t3`"},
+		{"SELECT t1.a AS a FROM ((SELECT a FROM t) AS t1)", true, "SELECT `t1`.`a` AS `a` FROM (SELECT `a` FROM `t`) AS `t1`"},
+		{"select count(*) from (select a, b from x1 union all select a, b from x3 union all (select x1.a, x3.b from (select * from x3 union all select * from x2) x3 left join x1 on x3.a = x1.b))", true, "SELECT COUNT(1) FROM (SELECT `a`,`b` FROM `x1` UNION ALL SELECT `a`,`b` FROM `x3` UNION ALL (SELECT `x1`.`a`,`x3`.`b` FROM (SELECT * FROM `x3` UNION ALL SELECT * FROM `x2`) AS `x3` LEFT JOIN `x1` ON `x3`.`a`=`x1`.`b`))"},
+		{"(SELECT 1 a,3 b) UNION (SELECT 2,1) ORDER BY (SELECT 2)", true, "(SELECT 1 AS `a`,3 AS `b`) UNION (SELECT 2,1) ORDER BY (SELECT 2)"},
+		{"((select * from t1)) union (select * from t1)", true, "(SELECT * FROM `t1`) UNION (SELECT * FROM `t1`)"},
+		{"(((select * from t1))) union (select * from t1)", true, "(SELECT * FROM `t1`) UNION (SELECT * FROM `t1`)"},
+		{"select * from (((select * from t1)) union (select * from t1) union (select * from t1)) a", true, "SELECT * FROM ((SELECT * FROM `t1`) UNION (SELECT * FROM `t1`) UNION (SELECT * FROM `t1`)) AS `a`"},
+		{"SELECT COUNT(*) FROM plan_executions WHERE (EXISTS((SELECT * FROM triggers WHERE plan_executions.trigger_id=triggers.id AND triggers.type='CRON')))", true, "SELECT COUNT(1) FROM `plan_executions` WHERE (EXISTS (SELECT * FROM `triggers` WHERE `plan_executions`.`trigger_id`=`triggers`.`id` AND `triggers`.`type`=_UTF8MB4'CRON'))"},
+		{"select exists((select 1));", true, "SELECT EXISTS (SELECT 1)"},
+		{"select * from ((SELECT 1 a,3 b) UNION (SELECT 2,1) ORDER BY (SELECT 2)) t order by a,b", true, "SELECT * FROM ((SELECT 1 AS `a`,3 AS `b`) UNION (SELECT 2,1) ORDER BY (SELECT 2)) AS `t` ORDER BY `a`,`b`"},
+		{"select (select * from t1 where a != t.a union all (select * from t2 where a != t.a) order by a limit 1) from t1 t", true, "SELECT (SELECT * FROM `t1` WHERE `a`!=`t`.`a` UNION ALL (SELECT * FROM `t2` WHERE `a`!=`t`.`a`) ORDER BY `a` LIMIT 1) FROM `t1` AS `t`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
 	tests := []struct {
 		input string
@@ -3732,18 +4467,20 @@ func (s *testParserSuite) TestSubquery(c *C) {
 		{"SELECT 1 > (select 1)", "select 1"},
 		{"SELECT 1 > (select 1 union select 2)", "select 1 union select 2"},
 	}
-	parser := parser.New()
-	for _, t := range tests {
-		stmt, err := parser.ParseOneStmt(t.input, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range tests {
+		stmt, err := p.ParseOneStmt(tbl.input, "", "")
+		require.NoError(t, err)
 		stmt.Accept(&subqueryChecker{
-			text: t.text,
-			c:    c,
+			text: tbl.text,
+			t:    t,
 		})
 	}
 }
-func (s *testParserSuite) TestUnion(c *C) {
+
+func TestSetOperator(t *testing.T) {
 	table := []testCase{
+		// union and union all
 		{"select c1 from t1 union select c2 from t2", true, "SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
 		{"select c1 from t1 union (select c2 from t2)", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`)"},
 		{"select c1 from t1 union (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
@@ -3764,13 +4501,111 @@ func (s *testParserSuite) TestUnion(c *C) {
 		{"insert into t select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
 		{"insert into t (c) select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
 		{"select 2 as a from dual union select 1 as b from dual order by a", true, "SELECT 2 AS `a` UNION SELECT 1 AS `b` ORDER BY `a`"},
+		{"table t1 union table t2", true, "TABLE `t1` UNION TABLE `t2`"},
+		{"table t1 union (table t2)", true, "TABLE `t1` UNION (TABLE `t2`)"},
+		{"table t1 union select * from t2", true, "TABLE `t1` UNION SELECT * FROM `t2`"},
+		{"select * from t1 union table t2", true, "SELECT * FROM `t1` UNION TABLE `t2`"},
+		{"table t1 union (select c2 from t2) order by c1 limit 1", true, "TABLE `t1` UNION (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"select c1 from t1 union (table t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` UNION (TABLE `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) union table t2 union (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION TABLE `t2` UNION (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(table t1) union select c2 from t2 union (table t3) order by c1 limit 1", true, "(TABLE `t1`) UNION SELECT `c2` FROM `t2` UNION (TABLE `t3`) ORDER BY `c1` LIMIT 1"},
+		{"values row(1,-2,3), row(5,7,9) union values row(1,-2,3), row(5,7,9)", true, "VALUES ROW(1,-2,3), ROW(5,7,9) UNION VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"values row(1,-2,3), row(5,7,9) union (values row(1,-2,3), row(5,7,9))", true, "VALUES ROW(1,-2,3), ROW(5,7,9) UNION (VALUES ROW(1,-2,3), ROW(5,7,9))"},
+		{"values row(1,-2,3), row(5,7,9) union select * from t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) UNION SELECT * FROM `t`"},
+		{"values row(1,-2,3), row(5,7,9) union table t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) UNION TABLE `t`"},
+		{"select * from t union values row(1,-2,3), row(5,7,9)", true, "SELECT * FROM `t` UNION VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"table t union values row(1,-2,3), row(5,7,9)", true, "TABLE `t` UNION VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		// except
+		{"select c1 from t1 except select c2 from t2", true, "SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"select c1 from t1 except (select c2 from t2)", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`)"},
+		{"select c1 from t1 except (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
+		{"select c1 from t1 except select c2 from t2 order by c2", true, "SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2` ORDER BY `c2`"},
+		{"select c1 from t1 except (select c2 from t2) limit 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) LIMIT 1"},
+		{"select c1 from t1 except (select c2 from t2) limit 1, 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"select c1 from t1 except (select c2 from t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) except (select c2 from t2) order by c1 except select c3 from t3", false, ""},
+		{"(select c1 from t1) except (select c2 from t2) limit 1 except select c3 from t3", false, ""},
+		{"(select c1 from t1) except select c2 from t2 except (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2` EXCEPT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select (select 1 except select 1) as a", true, "SELECT (SELECT 1 EXCEPT SELECT 1) AS `a`"},
+		{"select * from (select 1 except select 2) as a", true, "SELECT * FROM (SELECT 1 EXCEPT SELECT 2) AS `a`"},
+		{"insert into t select c1 from t1 except select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"insert into t (c) select c1 from t1 except select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"select 2 as a from dual except select 1 as b from dual order by a", true, "SELECT 2 AS `a` EXCEPT SELECT 1 AS `b` ORDER BY `a`"},
+		{"table t1 except table t2", true, "TABLE `t1` EXCEPT TABLE `t2`"},
+		{"table t1 except (table t2)", true, "TABLE `t1` EXCEPT (TABLE `t2`)"},
+		{"table t1 except select * from t2", true, "TABLE `t1` EXCEPT SELECT * FROM `t2`"},
+		{"select * from t1 except table t2", true, "SELECT * FROM `t1` EXCEPT TABLE `t2`"},
+		{"table t1 except (select c2 from t2) order by c1 limit 1", true, "TABLE `t1` EXCEPT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"select c1 from t1 except (table t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` EXCEPT (TABLE `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) except table t2 except (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) EXCEPT TABLE `t2` EXCEPT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(table t1) except select c2 from t2 except (table t3) order by c1 limit 1", true, "(TABLE `t1`) EXCEPT SELECT `c2` FROM `t2` EXCEPT (TABLE `t3`) ORDER BY `c1` LIMIT 1"},
+		{"values row(1,-2,3), row(5,7,9) except values row(1,-2,3), row(5,7,9)", true, "VALUES ROW(1,-2,3), ROW(5,7,9) EXCEPT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"values row(1,-2,3), row(5,7,9) except (values row(1,-2,3), row(5,7,9))", true, "VALUES ROW(1,-2,3), ROW(5,7,9) EXCEPT (VALUES ROW(1,-2,3), ROW(5,7,9))"},
+		{"values row(1,-2,3), row(5,7,9) except select * from t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) EXCEPT SELECT * FROM `t`"},
+		{"values row(1,-2,3), row(5,7,9) except table t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) EXCEPT TABLE `t`"},
+		{"select * from t except values row(1,-2,3), row(5,7,9)", true, "SELECT * FROM `t` EXCEPT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"table t except values row(1,-2,3), row(5,7,9)", true, "TABLE `t` EXCEPT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		// intersect
+		{"select c1 from t1 intersect select c2 from t2", true, "SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"select c1 from t1 intersect (select c2 from t2)", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`)"},
+		{"select c1 from t1 intersect (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
+		{"select c1 from t1 intersect select c2 from t2 order by c2", true, "SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2` ORDER BY `c2`"},
+		{"select c1 from t1 intersect (select c2 from t2) limit 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) LIMIT 1"},
+		{"select c1 from t1 intersect (select c2 from t2) limit 1, 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"select c1 from t1 intersect (select c2 from t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) intersect (select c2 from t2) order by c1 intersect select c3 from t3", false, ""},
+		{"(select c1 from t1) intersect (select c2 from t2) limit 1 intersect select c3 from t3", false, ""},
+		{"(select c1 from t1) intersect select c2 from t2 intersect (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT SELECT `c2` FROM `t2` INTERSECT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select (select 1 intersect select 1) as a", true, "SELECT (SELECT 1 INTERSECT SELECT 1) AS `a`"},
+		{"select * from (select 1 intersect select 2) as a", true, "SELECT * FROM (SELECT 1 INTERSECT SELECT 2) AS `a`"},
+		{"insert into t select c1 from t1 intersect select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"insert into t (c) select c1 from t1 intersect select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"select 2 as a from dual intersect select 1 as b from dual order by a", true, "SELECT 2 AS `a` INTERSECT SELECT 1 AS `b` ORDER BY `a`"},
+		{"table t1 intersect table t2", true, "TABLE `t1` INTERSECT TABLE `t2`"},
+		{"table t1 intersect (table t2)", true, "TABLE `t1` INTERSECT (TABLE `t2`)"},
+		{"table t1 intersect select * from t2", true, "TABLE `t1` INTERSECT SELECT * FROM `t2`"},
+		{"select * from t1 intersect table t2", true, "SELECT * FROM `t1` INTERSECT TABLE `t2`"},
+		{"table t1 intersect (select c2 from t2) order by c1 limit 1", true, "TABLE `t1` INTERSECT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"select c1 from t1 intersect (table t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` INTERSECT (TABLE `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) intersect table t2 intersect (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT TABLE `t2` INTERSECT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(table t1) intersect select c2 from t2 intersect (table t3) order by c1 limit 1", true, "(TABLE `t1`) INTERSECT SELECT `c2` FROM `t2` INTERSECT (TABLE `t3`) ORDER BY `c1` LIMIT 1"},
+		{"values row(1,-2,3), row(5,7,9) intersect values row(1,-2,3), row(5,7,9)", true, "VALUES ROW(1,-2,3), ROW(5,7,9) INTERSECT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"values row(1,-2,3), row(5,7,9) intersect (values row(1,-2,3), row(5,7,9))", true, "VALUES ROW(1,-2,3), ROW(5,7,9) INTERSECT (VALUES ROW(1,-2,3), ROW(5,7,9))"},
+		{"values row(1,-2,3), row(5,7,9) intersect select * from t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) INTERSECT SELECT * FROM `t`"},
+		{"values row(1,-2,3), row(5,7,9) intersect table t", true, "VALUES ROW(1,-2,3), ROW(5,7,9) INTERSECT TABLE `t`"},
+		{"select * from t intersect values row(1,-2,3), row(5,7,9)", true, "SELECT * FROM `t` INTERSECT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		{"table t intersect values row(1,-2,3), row(5,7,9)", true, "TABLE `t` INTERSECT VALUES ROW(1,-2,3), ROW(5,7,9)"},
+		// mixture of union, except and intersect
+		{"(select c1 from t1) intersect select c2 from t2 union (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT SELECT `c2` FROM `t2` UNION (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) union all select c2 from t2 except (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION ALL SELECT `c2` FROM `t2` EXCEPT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) except select c2 from t2 intersect (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2` INTERSECT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select 1 union distinct select 1 except select 1 intersect select 1", true, "SELECT 1 UNION SELECT 1 EXCEPT SELECT 1 INTERSECT SELECT 1"},
+		// mixture of union, except and intersect with parentheses
+		{"(select c1 from t1) intersect all (select c2 from t2 union (select c3 from t3)) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT ALL (SELECT `c2` FROM `t2` UNION (SELECT `c3` FROM `t3`)) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) union all (select c2 from t2 except select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION ALL (SELECT `c2` FROM `t2` EXCEPT SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"((select c1 from t1) except select c2 from t2) intersect all (select c3 from t3) order by c1 limit 1", true, "((SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2`) INTERSECT ALL (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select 1 union distinct (select 1 except all select 1 intersect select 1)", true, "SELECT 1 UNION (SELECT 1 EXCEPT ALL SELECT 1 INTERSECT SELECT 1)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestUnionOrderBy(c *C) {
-	parser := parser.New()
-	parser.EnableWindowFunc(s.enableWindowFunc)
+func checkOrderBy(t *testing.T, s ast.Node, hasOrderBy []bool, i int) int {
+	switch x := s.(type) {
+	case *ast.SelectStmt:
+		require.Equal(t, hasOrderBy[i], x.OrderBy != nil)
+		return i + 1
+	case *ast.SetOprSelectList:
+		for _, sel := range x.Selects {
+			i = checkOrderBy(t, sel, hasOrderBy, i)
+		}
+		return i
+	}
+	return i
+}
+
+func TestUnionOrderBy(t *testing.T) {
+	p := parser.New()
+	p.EnableWindowFunc(false)
 
 	tests := []struct {
 		src        string
@@ -3783,44 +4618,43 @@ func (s *testParserSuite) TestUnionOrderBy(c *C) {
 		{"select 1 a, 2 b from dual", []bool{false}},
 	}
 
-	for _, t := range tests {
-		stmt, _, err := parser.Parse(t.src, "", "")
-		c.Assert(err, IsNil)
-		us, ok := stmt[0].(*ast.UnionStmt)
+	for _, tbl := range tests {
+		stmt, _, err := p.Parse(tbl.src, "", "")
+		require.NoError(t, err)
+		us, ok := stmt[0].(*ast.SetOprStmt)
 		if ok {
 			var i int
 			for _, s := range us.SelectList.Selects {
-				c.Assert(s.OrderBy != nil, Equals, t.hasOrderBy[i])
-				i++
+				i = checkOrderBy(t, s, tbl.hasOrderBy, i)
 			}
-			c.Assert(us.OrderBy != nil, Equals, t.hasOrderBy[i])
+			require.Equal(t, tbl.hasOrderBy[i], us.OrderBy != nil)
 		}
 		ss, ok := stmt[0].(*ast.SelectStmt)
 		if ok {
-			c.Assert(ss.OrderBy != nil, Equals, t.hasOrderBy[0])
+			require.Equal(t, tbl.hasOrderBy[0], ss.OrderBy != nil)
 		}
 	}
 }
 
-func (s *testParserSuite) TestLikeEscape(c *C) {
+func TestLikeEscape(t *testing.T) {
 	table := []testCase{
 		// for like escape
-		{`select "abc_" like "abc\\_" escape ''`, true, "SELECT 'abc_' LIKE 'abc\\_'"},
-		{`select "abc_" like "abc\\_" escape '\\'`, true, "SELECT 'abc_' LIKE 'abc\\_'"},
+		{`select "abc_" like "abc\\_" escape ''`, true, "SELECT _UTF8MB4'abc_' LIKE _UTF8MB4'abc\\_'"},
+		{`select "abc_" like "abc\\_" escape '\\'`, true, "SELECT _UTF8MB4'abc_' LIKE _UTF8MB4'abc\\_'"},
 		{`select "abc_" like "abc\\_" escape '||'`, false, ""},
-		{`select "abc" like "escape" escape '+'`, true, "SELECT 'abc' LIKE 'escape' ESCAPE '+'"},
-		{"select '''_' like '''_' escape ''''", true, "SELECT '''_' LIKE '''_' ESCAPE ''''"},
+		{`select "abc" like "escape" escape '+'`, true, "SELECT _UTF8MB4'abc' LIKE _UTF8MB4'escape' ESCAPE '+'"},
+		{"select '''_' like '''_' escape ''''", true, "SELECT _UTF8MB4'''_' LIKE _UTF8MB4'''_' ESCAPE ''''"},
 	}
 
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestLockUnlockTables(c *C) {
+func TestLockUnlockTables(t *testing.T) {
 	table := []testCase{
 		{`UNLOCK TABLES;`, true, "UNLOCK TABLES"},
 		{`LOCK TABLES t1 READ;`, true, "LOCK TABLES `t1` READ"},
 		{`LOCK TABLES t1 READ LOCAL;`, true, "LOCK TABLES `t1` READ LOCAL"},
-		{`show table status like 't'`, true, "SHOW TABLE STATUS LIKE 't'"},
+		{`show table status like 't'`, true, "SHOW TABLE STATUS LIKE _UTF8MB4't'"},
 		{`LOCK TABLES t2 WRITE`, true, "LOCK TABLES `t2` WRITE"},
 		{`LOCK TABLES t2 WRITE LOCAL;`, true, "LOCK TABLES `t2` WRITE LOCAL"},
 		{`LOCK TABLES t1 WRITE, t2 READ;`, true, "LOCK TABLES `t1` WRITE, `t2` READ"},
@@ -3830,7 +4664,7 @@ func (s *testParserSuite) TestLockUnlockTables(c *C) {
 		{`UNLOCK TABLE;`, true, "UNLOCK TABLES"},
 		{`LOCK TABLE t1 READ;`, true, "LOCK TABLES `t1` READ"},
 		{`LOCK TABLE t1 READ LOCAL;`, true, "LOCK TABLES `t1` READ LOCAL"},
-		{`show table status like 't'`, true, "SHOW TABLE STATUS LIKE 't'"},
+		{`show table status like 't'`, true, "SHOW TABLE STATUS LIKE _UTF8MB4't'"},
 		{`LOCK TABLE t2 WRITE`, true, "LOCK TABLES `t2` WRITE"},
 		{`LOCK TABLE t2 WRITE LOCAL;`, true, "LOCK TABLES `t2` WRITE LOCAL"},
 		{`LOCK TABLE t1 WRITE, t2 READ;`, true, "LOCK TABLES `t1` WRITE, `t2` READ"},
@@ -3839,11 +4673,16 @@ func (s *testParserSuite) TestLockUnlockTables(c *C) {
 		{"ADMIN CLEANUP TABLE LOCK", false, ""},
 		{"ADMIN CLEANUP TABLE LOCK t", true, "ADMIN CLEANUP TABLE LOCK `t`"},
 		{"ADMIN CLEANUP TABLE LOCK t1,t2", true, "ADMIN CLEANUP TABLE LOCK `t1`, `t2`"},
+
+		// For alter table read only/write.
+		{"ALTER TABLE t READ ONLY", true, "ALTER TABLE `t` READ ONLY"},
+		{"ALTER TABLE t READ WRITE", true, "ALTER TABLE `t` READ WRITE"},
 	}
-	s.RunTest(c, table)
+
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestIndexHint(c *C) {
+func TestIndexHint(t *testing.T) {
 	table := []testCase{
 		{`select * from t use index (primary)`, true, "SELECT * FROM `t` USE INDEX (`primary`)"},
 		{"select * from t use index (`primary`)", true, "SELECT * FROM `t` USE INDEX (`primary`)"},
@@ -3856,10 +4695,11 @@ func (s *testParserSuite) TestIndexHint(c *C) {
 		{`select * from t force index for group by (idx1)`, true, "SELECT * FROM `t` FORCE INDEX FOR GROUP BY (`idx1`)"},
 		{`select * from t use index for group by (idx1) use index for order by (idx2), t2`, true, "SELECT * FROM (`t` USE INDEX FOR GROUP BY (`idx1`) USE INDEX FOR ORDER BY (`idx2`)) JOIN `t2`"},
 	}
-	s.RunTest(c, table)
+
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestPriority(c *C) {
+func TestPriority(t *testing.T) {
 	table := []testCase{
 		{`select high_priority * from t`, true, "SELECT HIGH_PRIORITY * FROM `t`"},
 		{`select low_priority * from t`, true, "SELECT LOW_PRIORITY * FROM `t`"},
@@ -3877,66 +4717,59 @@ func (s *testParserSuite) TestPriority(c *C) {
 		{`replace LOW_PRIORITY into t values (1)`, true, "REPLACE LOW_PRIORITY INTO `t` VALUES (1)"},
 		{`replace delayed into t values (1)`, true, "REPLACE DELAYED INTO `t` VALUES (1)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
-	parser := parser.New()
-	stmt, _, err := parser.Parse("select HIGH_PRIORITY * from t", "", "")
-	c.Assert(err, IsNil)
+	p := parser.New()
+	stmt, _, err := p.Parse("select HIGH_PRIORITY * from t", "", "")
+	require.NoError(t, err)
 	sel := stmt[0].(*ast.SelectStmt)
-	c.Assert(sel.SelectStmtOpts.Priority, Equals, mysql.HighPriority)
+	require.Equal(t, mysql.HighPriority, sel.SelectStmtOpts.Priority)
 }
 
-func (s *testParserSuite) TestSQLResult(c *C) {
+func TestSQLResult(t *testing.T) {
 	table := []testCase{
 		{`select SQL_BIG_RESULT c1 from t group by c1`, true, "SELECT SQL_BIG_RESULT `c1` FROM `t` GROUP BY `c1`"},
 		{`select SQL_SMALL_RESULT c1 from t group by c1`, true, "SELECT SQL_SMALL_RESULT `c1` FROM `t` GROUP BY `c1`"},
 		{`select SQL_BUFFER_RESULT * from t`, true, "SELECT SQL_BUFFER_RESULT * FROM `t`"},
 		{`select sql_small_result sql_big_result sql_buffer_result 1`, true, "SELECT SQL_SMALL_RESULT SQL_BIG_RESULT SQL_BUFFER_RESULT 1"},
+		{`select STRAIGHT_JOIN SQL_SMALL_RESULT * from t`, true, "SELECT SQL_SMALL_RESULT STRAIGHT_JOIN * FROM `t`"},
+		{`select SQL_CALC_FOUND_ROWS DISTINCT * from t`, true, "SELECT SQL_CALC_FOUND_ROWS DISTINCT * FROM `t`"},
 	}
-	s.RunTest(c, table)
+
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestSQLNoCache(c *C) {
+func TestSQLNoCache(t *testing.T) {
 	table := []testCase{
 		{`select SQL_NO_CACHE * from t`, false, ""},
 		{`select SQL_CACHE * from t`, true, "SELECT * FROM `t`"},
 		{`select * from t`, true, "SELECT * FROM `t`"},
 	}
 
-	parser := parser.New()
-	for _, tt := range table {
-		stmt, _, err := parser.Parse(tt.src, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range table {
+		stmt, _, err := p.Parse(tbl.src, "", "")
+		require.NoError(t, err)
 
 		sel := stmt[0].(*ast.SelectStmt)
-		c.Assert(sel.SelectStmtOpts.SQLCache, Equals, tt.ok)
+		require.Equal(t, tbl.ok, sel.SelectStmtOpts.SQLCache)
 	}
 }
 
-func (s *testParserSuite) TestEscape(c *C) {
+func TestEscape(t *testing.T) {
 	table := []testCase{
 		{`select """;`, false, ""},
-		{`select """";`, true, "SELECT '\"'"},
-		{`select "汉字";`, true, "SELECT '汉字'"},
-		{`select 'abc"def';`, true, "SELECT 'abc\"def'"},
-		{`select 'a\r\n';`, true, "SELECT 'a\r\n'"},
-		{`select "\a\r\n"`, true, "SELECT 'a\r\n'"},
-		{`select "\xFF"`, true, "SELECT 'xFF'"},
+		{`select """";`, true, "SELECT _UTF8MB4'\"'"},
+		{`select "汉字";`, true, "SELECT _UTF8MB4'汉字'"},
+		{`select 'abc"def';`, true, "SELECT _UTF8MB4'abc\"def'"},
+		{`select 'a\r\n';`, true, "SELECT _UTF8MB4'a\r\n'"},
+		{`select "\a\r\n"`, true, "SELECT _UTF8MB4'a\r\n'"},
+		{`select "\xFF"`, true, "SELECT _UTF8MB4'xFF'"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestInsertStatementMemoryAllocation(c *C) {
-	sql := "insert t values (1)" + strings.Repeat(",(1)", 1000)
-	var oldStats, newStats runtime.MemStats
-	runtime.ReadMemStats(&oldStats)
-	_, err := parser.New().ParseOneStmt(sql, "", "")
-	c.Assert(err, IsNil)
-	runtime.ReadMemStats(&newStats)
-	c.Assert(int(newStats.TotalAlloc-oldStats.TotalAlloc), Less, 1024*500)
-}
-
-func (s *testParserSuite) TestExplain(c *C) {
+func TestExplain(t *testing.T) {
 	table := []testCase{
 		{"explain select c1 from t1", true, "EXPLAIN FORMAT = 'row' SELECT `c1` FROM `t1`"},
 		{"explain delete t1, t2 from t1 inner join t2 inner join t3 where t1.id=t2.id and t2.id=t3.id;", true, "EXPLAIN FORMAT = 'row' DELETE `t1`,`t2` FROM (`t1` JOIN `t2`) JOIN `t3` WHERE `t1`.`id`=`t2`.`id` AND `t2`.`id`=`t3`.`id`"},
@@ -3945,54 +4778,71 @@ func (s *testParserSuite) TestExplain(c *C) {
 		{"explain update t set id = id + 1 order by id desc;", true, "EXPLAIN FORMAT = 'row' UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"explain select c1 from t1 union (select c2 from t2) limit 1, 1", true, "EXPLAIN FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
 		{`explain format = "row" select c1 from t1 union (select c2 from t2) limit 1, 1`, true, "EXPLAIN FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"explain format = 'brief' select * from t", true, "EXPLAIN FORMAT = 'brief' SELECT * FROM `t`"},
 		{"DESC SCHE.TABL", true, "DESC `SCHE`.`TABL`"},
 		{"DESC SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
 		{"DESCRIBE SCHE.TABL COLUM", true, "DESC `SCHE`.`TABL` `COLUM`"},
 		{"EXPLAIN ANALYZE SELECT 1", true, "EXPLAIN ANALYZE SELECT 1"},
 		{"EXPLAIN FORMAT = 'dot' SELECT 1", true, "EXPLAIN FORMAT = 'dot' SELECT 1"},
+		{"EXPLAIN FORMAT = DOT SELECT 1", true, "EXPLAIN FORMAT = 'DOT' SELECT 1"},
 		{"EXPLAIN FORMAT = 'row' SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
 		{"EXPLAIN FORMAT = 'ROW' SELECT 1", true, "EXPLAIN FORMAT = 'ROW' SELECT 1"},
+		{"EXPLAIN FORMAT = 'BRIEF' SELECT 1", true, "EXPLAIN FORMAT = 'BRIEF' SELECT 1"},
+		{"EXPLAIN FORMAT = BRIEF SELECT 1", true, "EXPLAIN FORMAT = 'BRIEF' SELECT 1"},
+		{"EXPLAIN FORMAT = 'verbose' SELECT 1", true, "EXPLAIN FORMAT = 'verbose' SELECT 1"},
+		{"EXPLAIN FORMAT = 'VERBOSE' SELECT 1", true, "EXPLAIN FORMAT = 'VERBOSE' SELECT 1"},
+		{"EXPLAIN FORMAT = VERBOSE SELECT 1", true, "EXPLAIN FORMAT = 'VERBOSE' SELECT 1"},
 		{"EXPLAIN SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
 		{"EXPLAIN FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
 		{"EXPLAIN FOR connection 42", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 42"},
 		{"EXPLAIN FORMAT = 'dot' FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'dot' FOR CONNECTION 1"},
+		{"EXPLAIN FORMAT = DOT FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'DOT' FOR CONNECTION 1"},
 		{"EXPLAIN FORMAT = 'row' FOR connection 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = TRADITIONAL FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'row' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = TRADITIONAL SELECT 1", true, "EXPLAIN FORMAT = 'row' SELECT 1"},
-		{"EXPLAIN FORMAT = JSON FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'json' FOR CONNECTION 1"},
-		{"EXPLAIN FORMAT = JSON SELECT 1", true, "EXPLAIN FORMAT = 'json' SELECT 1"},
+		{"EXPLAIN FORMAT = ROW FOR connection 1", true, "EXPLAIN FORMAT = 'ROW' FOR CONNECTION 1"},
+		{"EXPLAIN FORMAT = TRADITIONAL FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'TRADITIONAL' FOR CONNECTION 1"},
+		{"EXPLAIN FORMAT = TRADITIONAL SELECT 1", true, "EXPLAIN FORMAT = 'TRADITIONAL' SELECT 1"},
+		{"EXPLAIN FORMAT = BRIEF SELECT 1", true, "EXPLAIN FORMAT = 'BRIEF' SELECT 1"},
+		{"EXPLAIN FORMAT = 'brief' SELECT 1", true, "EXPLAIN FORMAT = 'brief' SELECT 1"},
+		{"EXPLAIN FORMAT = DOT SELECT 1", true, "EXPLAIN FORMAT = 'DOT' SELECT 1"},
+		{"EXPLAIN FORMAT = 'dot' SELECT 1", true, "EXPLAIN FORMAT = 'dot' SELECT 1"},
+		{"EXPLAIN FORMAT = VERBOSE SELECT 1", true, "EXPLAIN FORMAT = 'VERBOSE' SELECT 1"},
+		{"EXPLAIN FORMAT = 'verbose' SELECT 1", true, "EXPLAIN FORMAT = 'verbose' SELECT 1"},
+		{"EXPLAIN FORMAT = JSON FOR CONNECTION 1", true, "EXPLAIN FORMAT = 'JSON' FOR CONNECTION 1"},
+		{"EXPLAIN FORMAT = JSON SELECT 1", true, "EXPLAIN FORMAT = 'JSON' SELECT 1"},
 		{"EXPLAIN FORMAT = 'hint' SELECT 1", true, "EXPLAIN FORMAT = 'hint' SELECT 1"},
+		{"EXPLAIN ALTER TABLE t1 ADD INDEX (a)", true, "EXPLAIN FORMAT = 'row' ALTER TABLE `t1` ADD INDEX(`a`)"},
+		{"EXPLAIN ALTER TABLE t1 ADD a varchar(255)", true, "EXPLAIN FORMAT = 'row' ALTER TABLE `t1` ADD COLUMN `a` VARCHAR(255)"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestPrepare(c *C) {
+func TestPrepare(t *testing.T) {
 	table := []testCase{
 		{"PREPARE pname FROM 'SELECT ?'", true, "PREPARE `pname` FROM 'SELECT ?'"},
 		{"PREPARE pname FROM @test", true, "PREPARE `pname` FROM @`test`"},
 		{"PREPARE `` FROM @test", true, "PREPARE `` FROM @`test`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestDeallocate(c *C) {
+func TestDeallocate(t *testing.T) {
 	table := []testCase{
 		{"DEALLOCATE PREPARE test", true, "DEALLOCATE PREPARE `test`"},
 		{"DEALLOCATE PREPARE ``", true, "DEALLOCATE PREPARE ``"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestExecute(c *C) {
+func TestExecute(t *testing.T) {
 	table := []testCase{
 		{"EXECUTE test", true, "EXECUTE `test`"},
 		{"EXECUTE test USING @var1,@var2", true, "EXECUTE `test` USING @`var1`,@`var2`"},
 		{"EXECUTE `` USING @var1,@var2", true, "EXECUTE `` USING @`var1`,@`var2`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestTrace(c *C) {
+func TestTrace(t *testing.T) {
 	table := []testCase{
 		{"trace begin", true, "TRACE START TRANSACTION"},
 		{"trace commit", true, "TRACE COMMIT"},
@@ -4004,13 +4854,16 @@ func (s *testParserSuite) TestTrace(c *C) {
 		{"trace replace into foo values (1 || 2)", true, "TRACE REPLACE INTO `foo` VALUES (1 OR 2)"},
 		{"trace update t set id = id + 1 order by id desc;", true, "TRACE UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
 		{"trace select c1 from t1 union (select c2 from t2) limit 1, 1", true, "TRACE SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{"trace format = 'row' select c1 from t1 union (select c2 from t2) limit 1, 1", true, "TRACE FORMAT = 'row' SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
-		{"trace format = 'json' update t set id = id + 1 order by id desc;", true, "TRACE UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
+		{"trace format = 'row' select c1 from t1 union (select c2 from t2) limit 1, 1", true, "TRACE SELECT `c1` FROM `t1` UNION (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"trace format = 'json' update t set id = id + 1 order by id desc;", true, "TRACE FORMAT = 'json' UPDATE `t` SET `id`=`id`+1 ORDER BY `id` DESC"},
+		{"trace plan select c1 from t1", true, "TRACE PLAN SELECT `c1` FROM `t1`"},
+		{"trace plan target = 'estimation' select c1 from t1", true, "TRACE PLAN TARGET = 'estimation' SELECT `c1` FROM `t1`"},
+		{"trace plan target = 'arandomstring' select c1 from t1", true, "TRACE PLAN TARGET = 'arandomstring' SELECT `c1` FROM `t1`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestBinding(c *C) {
+func TestBinding(t *testing.T) {
 	table := []testCase{
 		{"create global binding for select * from t using select * from t use index(a)", true, "CREATE GLOBAL BINDING FOR SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`)"},
 		{"create session binding for select * from t using select * from t use index(a)", true, "CREATE SESSION BINDING FOR SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`)"},
@@ -4020,20 +4873,74 @@ func (s *testParserSuite) TestBinding(c *C) {
 		{"drop session binding for select * from t using select * from t use index(a)", true, "DROP SESSION BINDING FOR SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`)"},
 		{"show global bindings", true, "SHOW GLOBAL BINDINGS"},
 		{"show session bindings", true, "SHOW SESSION BINDINGS"},
+		{"set binding enable for select * from t", true, "SET BINDING ENABLE FOR SELECT * FROM `t`"},
+		{"set binding enable for select * from t using select * from t use index(a)", true, "SET BINDING ENABLE FOR SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`)"},
+		{"set binding disable for select * from t", true, "SET BINDING DISABLE FOR SELECT * FROM `t`"},
+		{"set binding disable for select * from t using select * from t use index(a)", true, "SET BINDING DISABLE FOR SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`)"},
+		{"create global binding for select * from t union all select * from t using select * from t use index(a) union all select * from t use index(a)", true, "CREATE GLOBAL BINDING FOR SELECT * FROM `t` UNION ALL SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`) UNION ALL SELECT * FROM `t` USE INDEX (`a`)"},
+		{"create session binding for select * from t union all select * from t using select * from t use index(a) union all select * from t use index(a)", true, "CREATE SESSION BINDING FOR SELECT * FROM `t` UNION ALL SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`) UNION ALL SELECT * FROM `t` USE INDEX (`a`)"},
+		{"drop global binding for select * from t union all select * from t using select * from t use index(a) union all select * from t use index(a)", true, "DROP GLOBAL BINDING FOR SELECT * FROM `t` UNION ALL SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`) UNION ALL SELECT * FROM `t` USE INDEX (`a`)"},
+		{"drop session binding for select * from t union all select * from t using select * from t use index(a) union all select * from t use index(a)", true, "DROP SESSION BINDING FOR SELECT * FROM `t` UNION ALL SELECT * FROM `t` USING SELECT * FROM `t` USE INDEX (`a`) UNION ALL SELECT * FROM `t` USE INDEX (`a`)"},
+		{"drop global binding for select * from t union all select * from t", true, "DROP GLOBAL BINDING FOR SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
+		{"create session binding for select 1 union select 2 intersect select 3 using select 1 union select 2 intersect select 3", true, "CREATE SESSION BINDING FOR SELECT 1 UNION SELECT 2 INTERSECT SELECT 3 USING SELECT 1 UNION SELECT 2 INTERSECT SELECT 3"},
+		{"drop session binding for select 1 union select 2 intersect select 3 using select 1 union select 2 intersect select 3", true, "DROP SESSION BINDING FOR SELECT 1 UNION SELECT 2 INTERSECT SELECT 3 USING SELECT 1 UNION SELECT 2 INTERSECT SELECT 3"},
+		{"drop session binding for select 1 union select 2 intersect select 3", true, "DROP SESSION BINDING FOR SELECT 1 UNION SELECT 2 INTERSECT SELECT 3"},
+		// Update cases.
+		{"CREATE GLOBAL BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1", true, "CREATE GLOBAL BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1"},
+		{"CREATE SESSION BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1", true, "CREATE SESSION BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1"},
+		{"drop global binding for update t set a = 1 where b = 1", true, "DROP GLOBAL BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1"},
+		{"drop session binding for update t set a = 1 where b = 1", true, "DROP SESSION BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1"},
+		{"DROP GLOBAL BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1", true, "DROP GLOBAL BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1"},
+		{"DROP SESSION BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1", true, "DROP SESSION BINDING FOR UPDATE `t` SET `a`=1 WHERE `b`=1 USING UPDATE /*+ USE_INDEX(`t` `b`)*/ `t` SET `a`=1 WHERE `b`=1"},
+		// Multi-table Update.
+		{"CREATE GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "CREATE GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		{"CREATE SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "CREATE SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		{"DROP GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "DROP GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		{"DROP SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "DROP SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		{"DROP GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "DROP GLOBAL BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		{"DROP SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`", true, "DROP SESSION BINDING FOR UPDATE `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b` USING UPDATE /*+ INL_JOIN(`t1`)*/ `t1` JOIN `t2` SET `t1`.`a`=1 WHERE `t1`.`b`=`t2`.`b`"},
+		// Delete cases.
+		{"CREATE GLOBAL BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1", true, "CREATE GLOBAL BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1"},
+		{"CREATE SESSION BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1", true, "CREATE SESSION BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1"},
+		{"drop global binding for delete from t where a = 1", true, "DROP GLOBAL BINDING FOR DELETE FROM `t` WHERE `a`=1"},
+		{"drop session binding for delete from t where a = 1", true, "DROP SESSION BINDING FOR DELETE FROM `t` WHERE `a`=1"},
+		{"DROP GLOBAL BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1", true, "DROP GLOBAL BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1"},
+		{"DROP SESSION BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1", true, "DROP SESSION BINDING FOR DELETE FROM `t` WHERE `a`=1 USING DELETE /*+ USE_INDEX(`t` `a`)*/ FROM `t` WHERE `a`=1"},
+		// Multi-table Delete.
+		{"CREATE GLOBAL BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1", true, "CREATE GLOBAL BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		{"CREATE SESSION BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1", true, "CREATE SESSION BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		{"drop global binding for delete t1, t2 from t1 inner join t2 on t1.b = t2.b where t1.a = 1", true, "DROP GLOBAL BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		{"drop session binding for delete t1, t2 from t1 inner join t2 on t1.b = t2.b where t1.a = 1", true, "DROP SESSION BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		{"DROP GLOBAL BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1", true, "DROP GLOBAL BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		{"DROP SESSION BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1", true, "DROP SESSION BINDING FOR DELETE `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1 USING DELETE /*+ HASH_JOIN(`t1`, `t2`)*/ `t1`,`t2` FROM `t1` JOIN `t2` ON `t1`.`b`=`t2`.`b` WHERE `t1`.`a`=1"},
+		// Insert cases.
+		{"CREATE GLOBAL BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "CREATE GLOBAL BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"CREATE SESSION BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "CREATE SESSION BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"drop global binding for insert into t1 select * from t2 where t1.a=1", true, "DROP GLOBAL BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t1`.`a`=1"},
+		{"drop session binding for insert into t1 select * from t2 where t1.a=1", true, "DROP SESSION BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t1`.`a`=1"},
+		{"DROP GLOBAL BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "DROP GLOBAL BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"DROP SESSION BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "DROP SESSION BINDING FOR INSERT INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING INSERT INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		// Replace cases.
+		{"CREATE GLOBAL BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "CREATE GLOBAL BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"CREATE SESSION BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "CREATE SESSION BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"drop global binding for replace into t1 select * from t2 where t1.a=1", true, "DROP GLOBAL BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t1`.`a`=1"},
+		{"drop session binding for replace into t1 select * from t2 where t1.a=1", true, "DROP SESSION BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t1`.`a`=1"},
+		{"DROP GLOBAL BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "DROP GLOBAL BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
+		{"DROP SESSION BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1", true, "DROP SESSION BINDING FOR REPLACE INTO `t1` SELECT * FROM `t2` WHERE `t2`.`a`=1 USING REPLACE INTO `t1` SELECT /*+ USE_INDEX(`t2` `a`)*/ * FROM `t2` WHERE `t2`.`a`=1"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
 	p := parser.New()
 	sms, _, err := p.Parse("create global binding for select * from t using select * from t use index(a)", "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	v, ok := sms[0].(*ast.CreateBindingStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(v.OriginSel.Text(), Equals, "select * from t")
-	c.Assert(v.HintedSel.Text(), Equals, "select * from t use index(a)")
-	c.Assert(v.GlobalScope, IsTrue)
+	require.True(t, ok)
+	require.Equal(t, "select * from t", v.OriginNode.Text())
+	require.Equal(t, "select * from t use index(a)", v.HintedNode.Text())
+	require.True(t, v.GlobalScope)
 }
 
-func (s *testParserSuite) TestView(c *C) {
+func TestView(t *testing.T) {
 	table := []testCase{
 		{"create view v as select * from t", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
 		{"create or replace view v as select * from t", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
@@ -4049,18 +4956,18 @@ func (s *testParserSuite) TestView(c *C) {
 		{"create or replace algorithm = merge definer = current_user view v as select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
 
 		// create view with `(` select statement `)`
-		{"create view v as (select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = undefined view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = temptable view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` WITH LOCAL CHECK OPTION"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = current_user view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
+		{"create view v as (select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = undefined view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = temptable view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`) WITH LOCAL CHECK OPTION"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = current_user view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
 
 		// create view with union statement
 		{"create view v as select * from t union select * from t", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
@@ -4091,31 +4998,31 @@ func (s *testParserSuite) TestView(c *C) {
 		{"create or replace algorithm = merge definer = current_user view v as select * from t union all select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
 
 		// create view with `(` union statement `)`
-		{"create view v as (select * from t union all select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = undefined view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = temptable view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION ALL SELECT * FROM `t` WITH LOCAL CHECK OPTION"},
-		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
+		{"create view v as (select * from t union all select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = undefined view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = temptable view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`) WITH LOCAL CHECK OPTION"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
 		{"create or replace algorithm = merge definer = current_user view v as select * from t union all select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
 	// Test case for the text of the select statement in create view statement.
 	p := parser.New()
 	sms, _, err := p.Parse("create view v as select * from t", "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	v, ok := sms[0].(*ast.CreateViewStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(v.Algorithm, Equals, model.AlgorithmUndefined)
-	c.Assert(v.Select.Text(), Equals, "select * from t")
-	c.Assert(v.Security, Equals, model.SecurityDefiner)
-	c.Assert(v.CheckOption, Equals, model.CheckOptionCascaded)
+	require.True(t, ok)
+	require.Equal(t, model.AlgorithmUndefined, v.Algorithm)
+	require.Equal(t, "select * from t", v.Select.Text())
+	require.Equal(t, model.SecurityDefiner, v.Security)
+	require.Equal(t, model.CheckOptionCascaded, v.CheckOption)
 
 	src := `CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = root@localhost
                   SQL SECURITY DEFINER
@@ -4124,39 +5031,39 @@ func (s *testParserSuite) TestView(c *C) {
 
 	var st ast.StmtNode
 	st, err = p.ParseOneStmt(src, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	v, ok = st.(*ast.CreateViewStmt)
-	c.Assert(ok, IsTrue)
-	c.Assert(v.OrReplace, IsTrue)
-	c.Assert(v.Algorithm, Equals, model.AlgorithmUndefined)
-	c.Assert(v.Definer.Username, Equals, "root")
-	c.Assert(v.Definer.Hostname, Equals, "localhost")
-	c.Assert(v.Cols[0], Equals, model.NewCIStr("a"))
-	c.Assert(v.Cols[1], Equals, model.NewCIStr("b"))
-	c.Assert(v.Cols[2], Equals, model.NewCIStr("c"))
-	c.Assert(v.Select.Text(), Equals, "select c,d,e from t")
-	c.Assert(v.Security, Equals, model.SecurityDefiner)
-	c.Assert(v.CheckOption, Equals, model.CheckOptionCascaded)
+	require.True(t, ok)
+	require.True(t, v.OrReplace)
+	require.Equal(t, model.AlgorithmUndefined, v.Algorithm)
+	require.Equal(t, "root", v.Definer.Username)
+	require.Equal(t, "localhost", v.Definer.Hostname)
+	require.Equal(t, model.NewCIStr("a"), v.Cols[0])
+	require.Equal(t, model.NewCIStr("b"), v.Cols[1])
+	require.Equal(t, model.NewCIStr("c"), v.Cols[2])
+	require.Equal(t, "select c,d,e from t", v.Select.Text())
+	require.Equal(t, model.SecurityDefiner, v.Security)
+	require.Equal(t, model.CheckOptionCascaded, v.CheckOption)
 }
 
-func (s *testParserSuite) TestTimestampDiffUnit(c *C) {
+func TestTimestampDiffUnit(t *testing.T) {
 	// Test case for timestampdiff unit.
 	// TimeUnit should be unified to upper case.
-	parser := parser.New()
-	stmt, _, err := parser.Parse("SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01'), TIMESTAMPDIFF(month,'2003-02-01','2003-05-01');", "", "")
-	c.Assert(err, IsNil)
+	p := parser.New()
+	stmt, _, err := p.Parse("SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01'), TIMESTAMPDIFF(month,'2003-02-01','2003-05-01');", "", "")
+	require.NoError(t, err)
 	ss := stmt[0].(*ast.SelectStmt)
 	fields := ss.Fields.Fields
-	c.Assert(len(fields), Equals, 2)
+	require.Len(t, fields, 2)
 	expr := fields[0].Expr
 	f, ok := expr.(*ast.FuncCallExpr)
-	c.Assert(ok, IsTrue)
-	c.Assert(f.Args[0].(*ast.TimeUnitExpr).Unit, Equals, ast.TimeUnitMonth)
+	require.True(t, ok)
+	require.Equal(t, ast.TimeUnitMonth, f.Args[0].(*ast.TimeUnitExpr).Unit)
 
 	expr = fields[1].Expr
 	f, ok = expr.(*ast.FuncCallExpr)
-	c.Assert(ok, IsTrue)
-	c.Assert(f.Args[0].(*ast.TimeUnitExpr).Unit, Equals, ast.TimeUnitMonth)
+	require.True(t, ok)
+	require.Equal(t, ast.TimeUnitMonth, f.Args[0].(*ast.TimeUnitExpr).Unit)
 
 	// Test Illegal TimeUnit for TimestampDiff
 	table := []testCase{
@@ -4172,10 +5079,36 @@ func (s *testParserSuite) TestTimestampDiffUnit(c *C) {
 		{"SELECT TIMESTAMPDIFF(DAY_HOUR,'2003-02-01','2003-05-01')", false, ""},
 		{"SELECT TIMESTAMPDIFF(YEAR_MONTH,'2003-02-01','2003-05-01')", false, ""},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestSessionManage(c *C) {
+func TestFuncCallExprOffset(t *testing.T) {
+	// Test case for offset field on func call expr.
+	p := parser.New()
+	stmt, _, err := p.Parse("SELECT s.a(), b();", "", "")
+	require.NoError(t, err)
+	ss := stmt[0].(*ast.SelectStmt)
+	fields := ss.Fields.Fields
+	require.Len(t, fields, 2)
+
+	{
+		// s.a()
+		expr := fields[0].Expr
+		f, ok := expr.(*ast.FuncCallExpr)
+		require.True(t, ok)
+		require.Equal(t, 7, f.OriginTextPosition())
+	}
+
+	{
+		// b()
+		expr := fields[1].Expr
+		f, ok := expr.(*ast.FuncCallExpr)
+		require.True(t, ok)
+		require.Equal(t, 14, f.OriginTextPosition())
+	}
+}
+
+func TestSessionManage(t *testing.T) {
 	table := []testCase{
 		// Kill statement.
 		// See https://dev.mysql.com/doc/refman/5.7/en/kill.html
@@ -4188,65 +5121,66 @@ func (s *testParserSuite) TestSessionManage(c *C) {
 		{"show processlist", true, "SHOW PROCESSLIST"},
 		{"show full processlist", true, "SHOW FULL PROCESSLIST"},
 		{"shutdown", true, "SHUTDOWN"},
+		{"restart", true, "RESTART"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestParseShowOpenTables(c *C) {
+func TestParseShowOpenTables(t *testing.T) {
 	table := []testCase{
 		{"SHOW OPEN TABLES", true, "SHOW OPEN TABLES"},
 		{"SHOW OPEN TABLES IN test", true, "SHOW OPEN TABLES IN `test`"},
 		{"SHOW OPEN TABLES FROM test", true, "SHOW OPEN TABLES IN `test`"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestSQLModeANSIQuotes(c *C) {
-	parser := parser.New()
-	parser.SetSQLMode(mysql.ModeANSIQuotes)
+func TestSQLModeANSIQuotes(t *testing.T) {
+	p := parser.New()
+	p.SetSQLMode(mysql.ModeANSIQuotes)
 	tests := []string{
 		`CREATE TABLE "table" ("id" int)`,
 		`select * from t "tt"`,
 	}
 	for _, test := range tests {
-		_, _, err := parser.Parse(test, "", "")
-		c.Assert(err, IsNil)
+		_, _, err := p.Parse(test, "", "")
+		require.NoError(t, err)
 	}
 }
 
-func (s *testParserSuite) TestDDLStatements(c *C) {
-	parser := parser.New()
+func TestDDLStatements(t *testing.T) {
+	p := parser.New()
 	// Tests that whatever the charset it is define, we always assign utf8 charset and utf8_bin collate.
 	createTableStr := `CREATE TABLE t (
 		a varchar(64) binary,
 		b char(10) charset utf8 collate utf8_general_ci,
 		c text charset latin1) ENGINE=innoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin`
-	stmts, _, err := parser.Parse(createTableStr, "", "")
-	c.Assert(err, IsNil)
+	stmts, _, err := p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
 	stmt := stmts[0].(*ast.CreateTableStmt)
-	c.Assert(mysql.HasBinaryFlag(stmt.Cols[0].Tp.Flag), IsTrue)
+	require.True(t, mysql.HasBinaryFlag(stmt.Cols[0].Tp.Flag))
 	for _, colDef := range stmt.Cols[1:] {
-		c.Assert(mysql.HasBinaryFlag(colDef.Tp.Flag), IsFalse)
+		require.False(t, mysql.HasBinaryFlag(colDef.Tp.Flag))
 	}
 	for _, tblOpt := range stmt.Options {
 		switch tblOpt.Tp {
 		case ast.TableOptionCharset:
-			c.Assert(tblOpt.StrValue, Equals, "utf8")
+			require.Equal(t, "utf8", tblOpt.StrValue)
 		case ast.TableOptionCollate:
-			c.Assert(tblOpt.StrValue, Equals, "utf8_bin")
+			require.Equal(t, "utf8_bin", tblOpt.StrValue)
 		}
 	}
 	createTableStr = `CREATE TABLE t (
 		a varbinary(64),
 		b binary(10),
 		c blob)`
-	stmts, _, err = parser.Parse(createTableStr, "", "")
-	c.Assert(err, IsNil)
+	stmts, _, err = p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
 	stmt = stmts[0].(*ast.CreateTableStmt)
 	for _, colDef := range stmt.Cols {
-		c.Assert(colDef.Tp.Charset, Equals, charset.CharsetBin)
-		c.Assert(colDef.Tp.Collate, Equals, charset.CollationBin)
-		c.Assert(mysql.HasBinaryFlag(colDef.Tp.Flag), IsTrue)
+		require.Equal(t, charset.CharsetBin, colDef.Tp.Charset)
+		require.Equal(t, charset.CollationBin, colDef.Tp.Collate)
+		require.True(t, mysql.HasBinaryFlag(colDef.Tp.Flag))
 	}
 	// Test set collate for all column types
 	createTableStr = `CREATE TABLE t (
@@ -4277,11 +5211,31 @@ func (s *testParserSuite) TestDDLStatements(c *C) {
 		c_enum enum('1') collate utf8_bin,
 		c_set set('1') collate utf8_bin,
 		c_json json collate utf8_bin)`
-	stmts, _, err = parser.Parse(createTableStr, "", "")
-	c.Assert(err, IsNil)
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
+
+	createTableStr = `CREATE TABLE t (c_double double(10))`
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.EqualError(t, err, "[parser:1149]You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use")
+	p.SetStrictDoubleTypeCheck(false)
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
+	p.SetStrictDoubleTypeCheck(true)
+
+	createTableStr = `CREATE TABLE t (c_double double(10, 2))`
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
+
+	createTableStr = `create global temporary table t010(local_01 int, local_03 varchar(20))`
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.EqualError(t, err, "line 1 column 70 near \"\"GLOBAL TEMPORARY and ON COMMIT DELETE ROWS must appear together ")
+
+	createTableStr = `create global temporary table t010(local_01 int, local_03 varchar(20)) on commit preserve rows`
+	_, _, err = p.Parse(createTableStr, "", "")
+	require.NoError(t, err)
 }
 
-func (s *testParserSuite) TestAnalyze(c *C) {
+func TestAnalyze(t *testing.T) {
 	table := []testCase{
 		{"analyze table t1", true, "ANALYZE TABLE `t1`"},
 		{"analyze table t1.*", false, ""},
@@ -4302,11 +5256,93 @@ func (s *testParserSuite) TestAnalyze(c *C) {
 		{"analyze table t partition a index b with 4 buckets", true, "ANALYZE TABLE `t` PARTITION `a` INDEX `b` WITH 4 BUCKETS"},
 		{"analyze incremental table t index", true, "ANALYZE INCREMENTAL TABLE `t` INDEX"},
 		{"analyze incremental table t index idx", true, "ANALYZE INCREMENTAL TABLE `t` INDEX `idx`"},
+		{"analyze table t update histogram on b with 1024 buckets", true, "ANALYZE TABLE `t` UPDATE HISTOGRAM ON `b` WITH 1024 BUCKETS"},
+		{"analyze table t drop histogram on b", true, "ANALYZE TABLE `t` DROP HISTOGRAM ON `b`"},
+		{"analyze table t update histogram on c1, c2;", true, "ANALYZE TABLE `t` UPDATE HISTOGRAM ON `c1`,`c2`"},
+		{"analyze table t drop histogram on c1, c2;", true, "ANALYZE TABLE `t` DROP HISTOGRAM ON `c1`,`c2`"},
+		{"analyze table t update histogram on t.c1, t.c2", false, ""},
+		{"analyze table t drop histogram on t.c1, t.c2", false, ""},
+		{"analyze table t1,t2 all columns", true, "ANALYZE TABLE `t1`,`t2` ALL COLUMNS"},
+		{"analyze table t partition a all columns", true, "ANALYZE TABLE `t` PARTITION `a` ALL COLUMNS"},
+		{"analyze table t1,t2 all columns with 4 topn", true, "ANALYZE TABLE `t1`,`t2` ALL COLUMNS WITH 4 TOPN"},
+		{"analyze table t partition a all columns with 1024 buckets", true, "ANALYZE TABLE `t` PARTITION `a` ALL COLUMNS WITH 1024 BUCKETS"},
+		{"analyze table t1,t2 predicate columns", true, "ANALYZE TABLE `t1`,`t2` PREDICATE COLUMNS"},
+		{"analyze table t partition a predicate columns", true, "ANALYZE TABLE `t` PARTITION `a` PREDICATE COLUMNS"},
+		{"analyze table t1,t2 predicate columns with 4 topn", true, "ANALYZE TABLE `t1`,`t2` PREDICATE COLUMNS WITH 4 TOPN"},
+		{"analyze table t partition a predicate columns with 1024 buckets", true, "ANALYZE TABLE `t` PARTITION `a` PREDICATE COLUMNS WITH 1024 BUCKETS"},
+		{"analyze table t columns c1,c2", true, "ANALYZE TABLE `t` COLUMNS `c1`,`c2`"},
+		{"analyze table t partition a columns c1,c2", true, "ANALYZE TABLE `t` PARTITION `a` COLUMNS `c1`,`c2`"},
+		{"analyze table t columns t.c1,t.c2", false, ""},
+		{"analyze table t partition a columns t.c1,t.c2", false, ""},
+		{"analyze table t columns c1,c2 with 4 topn", true, "ANALYZE TABLE `t` COLUMNS `c1`,`c2` WITH 4 TOPN"},
+		{"analyze table t partition a columns c1,c2 with 1024 buckets", true, "ANALYZE TABLE `t` PARTITION `a` COLUMNS `c1`,`c2` WITH 1024 BUCKETS"},
+		{"analyze table t index a columns c", false, ""},
+		{"analyze table t index a all columns", false, ""},
+		{"analyze table t index a predicate columns", false, ""},
+		{"analyze table t with 10 samplerate", true, "ANALYZE TABLE `t` WITH 10 SAMPLERATE"},
+		{"analyze table t with 0.1 samplerate", true, "ANALYZE TABLE `t` WITH 0.1 SAMPLERATE"},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestGeneratedColumn(c *C) {
+func TestTableSample(t *testing.T) {
+	table := []testCase{
+		// positive test cases
+		{"select * from tbl tablesample system (50);", true, "SELECT * FROM `tbl` TABLESAMPLE SYSTEM (50)"},
+		{"select * from tbl tablesample system (50 percent);", true, "SELECT * FROM `tbl` TABLESAMPLE SYSTEM (50 PERCENT)"},
+		{"select * from tbl tablesample system (49.9 percent);", true, "SELECT * FROM `tbl` TABLESAMPLE SYSTEM (49.9 PERCENT)"},
+		{"select * from tbl tablesample system (120 rows);", true, "SELECT * FROM `tbl` TABLESAMPLE SYSTEM (120 ROWS)"},
+		{"select * from tbl tablesample bernoulli (50);", true, "SELECT * FROM `tbl` TABLESAMPLE BERNOULLI (50)"},
+		{"select * from tbl tablesample (50);", true, "SELECT * FROM `tbl` TABLESAMPLE (50)"},
+		{"select * from tbl tablesample (50) repeatable (123456789);", true, "SELECT * FROM `tbl` TABLESAMPLE (50) REPEATABLE(123456789)"},
+		{"select * from tbl as a tablesample (50);", true, "SELECT * FROM `tbl` AS `a` TABLESAMPLE (50)"},
+		{"select * from tbl `tablesample` tablesample (50);", true, "SELECT * FROM `tbl` AS `tablesample` TABLESAMPLE (50)"},
+		{"select * from tbl tablesample (50) where id > 20;", true, "SELECT * FROM `tbl` TABLESAMPLE (50) WHERE `id`>20"},
+		{"select * from tbl partition (p0) tablesample (50);", true, "SELECT * FROM `tbl` PARTITION(`p0`) TABLESAMPLE (50)"},
+		{"select * from tbl tablesample (0 percent);", true, "SELECT * FROM `tbl` TABLESAMPLE (0 PERCENT)"},
+		{"select * from tbl tablesample (100 percent);", true, "SELECT * FROM `tbl` TABLESAMPLE (100 PERCENT)"},
+		{"select * from tbl tablesample (0 rows);", true, "SELECT * FROM `tbl` TABLESAMPLE (0 ROWS)"},
+		{"select * from tbl tablesample ('34');", true, "SELECT * FROM `tbl` TABLESAMPLE (_UTF8MB4'34')"},
+		{"select * from tbl1 tablesample (10), tbl2 tablesample (20);", true, "SELECT * FROM (`tbl1` TABLESAMPLE (10)) JOIN `tbl2` TABLESAMPLE (20)"},
+		{"select * from tbl1 a tablesample (10) join tbl2 b tablesample (20) on a.id <> b.id;", true, "SELECT * FROM `tbl1` AS `a` TABLESAMPLE (10) JOIN `tbl2` AS `b` TABLESAMPLE (20) ON `a`.`id`!=`b`.`id`"},
+		{"select * from demo tablesample bernoulli(50) limit 1 into outfile '/tmp/sample.csv';", true, "SELECT * FROM `demo` TABLESAMPLE BERNOULLI (50) LIMIT 1 INTO OUTFILE '/tmp/sample.csv'"},
+		{"select * from demo tablesample bernoulli(50) order by a, b into outfile '/tmp/sample.csv';", true, "SELECT * FROM `demo` TABLESAMPLE BERNOULLI (50) ORDER BY `a`,`b` INTO OUTFILE '/tmp/sample.csv'"},
+
+		// negative test cases
+		{"select * from tbl tablesample system(50) a;", false, ""},
+		{"select * from tbl tablesample (50) partition (p0);", false, ""},
+		{"select * from tbl where id > 20 tablesample system(50);", false, ""},
+		{"select * from (select * from tbl) a tablesample system(50);", false, ""},
+		{"select * from tbl tablesample system(50) tablesample system(50);", false, ""},
+		{"select * from tbl tablesample system(50, 50);", false, ""},
+		{"select * from tbl tablesample dhfksdlfljcoew(50);", false, ""},
+		{"select * from tbl tablesample system;", false, ""},
+		{"select * from tbl tablesample system (33) repeatable;", false, ""},
+		{"select 1 from dual tablesample system (50);", false, ""},
+	}
+	RunTest(t, table, false)
+	p := parser.New()
+	cases := []string{
+		"select * from tbl tablesample (33.3 + 44.4);",
+		"select * from tbl tablesample (33.3 + 44.4 percent);",
+		"select * from tbl tablesample (33 + 44 rows);",
+		"select * from tbl tablesample (33 + 44 rows) repeatable (55 + 66);",
+		"select * from tbl tablesample (200);",
+		"select * from tbl tablesample (-10);",
+		"select * from tbl tablesample (null);",
+		"select * from tbl tablesample (33.3 rows);",
+		"select * from tbl tablesample (-4 rows);",
+		"select * from tbl tablesample (50) repeatable ('ssss');",
+		"delete from tbl using tbl2 tablesample(10 rows) repeatable (111) where tbl.id = tbl2.id",
+		"update tbl tablesample regions() set id = '1'",
+	}
+	for _, sql := range cases {
+		_, err := p.ParseOneStmt(sql, "", "")
+		require.NoErrorf(t, err, "source %v", sql)
+	}
+}
+
+func TestGeneratedColumn(t *testing.T) {
 	tests := []struct {
 		input string
 		ok    bool
@@ -4316,27 +5352,26 @@ func (s *testParserSuite) TestGeneratedColumn(c *C) {
 		{"create table t (c int, d int as (   c + 1   ) virtual)", true, "c + 1"},
 		{"create table t (c int, d int as (1 + 1) stored)", true, "1 + 1"},
 	}
-	parser := parser.New()
-	for _, tt := range tests {
-		stmtNodes, _, err := parser.Parse(tt.input, "", "")
-		if tt.ok {
-			c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range tests {
+		stmtNodes, _, err := p.Parse(tbl.input, "", "")
+		if tbl.ok {
+			require.NoError(t, err)
 			stmtNode := stmtNodes[0]
 			for _, col := range stmtNode.(*ast.CreateTableStmt).Cols {
 				for _, opt := range col.Options {
 					if opt.Tp == ast.ColumnOptionGenerated {
-						c.Assert(opt.Expr.Text(), Equals, tt.expr)
+						require.Equal(t, tbl.expr, opt.Expr.Text())
 					}
 				}
 			}
 		} else {
-			c.Assert(err, NotNil)
+			require.Error(t, err)
 		}
 	}
-
 }
 
-func (s *testParserSuite) TestSetTransaction(c *C) {
+func TestSetTransaction(t *testing.T) {
 	// Set transaction is equivalent to setting the global or session value of tx_isolation.
 	// For example:
 	// SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -4355,31 +5390,31 @@ func (s *testParserSuite) TestSetTransaction(c *C) {
 			true, "REPEATABLE-READ",
 		},
 	}
-	parser := parser.New()
-	for _, t := range tests {
-		stmt1, err := parser.ParseOneStmt(t.input, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range tests {
+		stmt1, err := p.ParseOneStmt(tbl.input, "", "")
+		require.NoError(t, err)
 		setStmt := stmt1.(*ast.SetStmt)
 		vars := setStmt.Variables[0]
-		c.Assert(vars.Name, Equals, "tx_isolation")
-		c.Assert(vars.IsGlobal, Equals, t.isGlobal)
-		c.Assert(vars.IsSystem, Equals, true)
-		c.Assert(vars.Value.(ast.ValueExpr).GetValue(), Equals, t.value)
+		require.Equal(t, "tx_isolation", vars.Name)
+		require.Equal(t, tbl.isGlobal, vars.IsGlobal)
+		require.Equal(t, true, vars.IsSystem)
+		require.Equal(t, tbl.value, vars.Value.(ast.ValueExpr).GetValue())
 	}
 }
 
-func (s *testParserSuite) TestSideEffect(c *C) {
+func TestSideEffect(t *testing.T) {
 	// This test cover a bug that parse an error SQL doesn't leave the parser in a
 	// clean state, cause the following SQL parse fail.
-	parser := parser.New()
-	_, err := parser.ParseOneStmt("create table t /*!50100 'abc', 'abc' */;", "", "")
-	c.Assert(err, NotNil)
+	p := parser.New()
+	_, err := p.ParseOneStmt("create table t /*!50100 'abc', 'abc' */;", "", "")
+	require.Error(t, err)
 
-	_, err = parser.ParseOneStmt("show tables;", "", "")
-	c.Assert(err, IsNil)
+	_, err = p.ParseOneStmt("show tables;", "", "")
+	require.NoError(t, err)
 }
 
-func (s *testParserSuite) TestTablePartition(c *C) {
+func TestTablePartition(t *testing.T) {
 	table := []testCase{
 		{"ALTER TABLE t1 TRUNCATE PARTITION p0", true, "ALTER TABLE `t1` TRUNCATE PARTITION `p0`"},
 		{"ALTER TABLE t1 TRUNCATE PARTITION p0, p1", true, "ALTER TABLE `t1` TRUNCATE PARTITION `p0`,`p1`"},
@@ -4467,9 +5502,9 @@ func (s *testParserSuite) TestTablePartition(c *C) {
 		( partition p0 values less than (2, 'b'),
 		  partition p1 values less than (4, 'd'),
 		  partition p2 values less than (10, 'za'));`, true,
-			"CREATE TABLE `t1` (`a` VARCHAR(5),`b` INT,`c` VARCHAR(10),`d` DATETIME) PARTITION BY RANGE COLUMNS (`b`,`c`) SUBPARTITION BY HASH (TO_SECONDS(`d`)) (PARTITION `p0` VALUES LESS THAN (2, 'b'),PARTITION `p1` VALUES LESS THAN (4, 'd'),PARTITION `p2` VALUES LESS THAN (10, 'za'))"},
+			"CREATE TABLE `t1` (`a` VARCHAR(5),`b` INT,`c` VARCHAR(10),`d` DATETIME) PARTITION BY RANGE COLUMNS (`b`,`c`) SUBPARTITION BY HASH (TO_SECONDS(`d`)) (PARTITION `p0` VALUES LESS THAN (2, _UTF8MB4'b'),PARTITION `p1` VALUES LESS THAN (4, _UTF8MB4'd'),PARTITION `p2` VALUES LESS THAN (10, _UTF8MB4'za'))"},
 		{`CREATE TABLE t1 (a INT, b TIMESTAMP DEFAULT '0000-00-00 00:00:00')
-ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `t1` (`a` INT,`b` TIMESTAMP DEFAULT '0000-00-00 00:00:00') ENGINE = INNODB PARTITION BY LINEAR HASH (`a`) PARTITIONS 1"},
+ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `t1` (`a` INT,`b` TIMESTAMP DEFAULT _UTF8MB4'0000-00-00 00:00:00') ENGINE = INNODB PARTITION BY LINEAR HASH (`a`) PARTITIONS 1"},
 
 		// empty clause is valid only for HASH/KEY partitions
 		{"create table t1 (a int) partition by hash (a) (partition x, partition y)", true, "CREATE TABLE `t1` (`a` INT) PARTITION BY HASH (`a`) (PARTITION `x`,PARTITION `y`)"},
@@ -4567,72 +5602,70 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 			"CREATE TABLE `t1` (`a` INT,`b` INT) PARTITION BY RANGE (`a`) SUBPARTITION BY HASH (`b`) SUBPARTITIONS 1 (PARTITION `x` VALUES LESS THAN (MAXVALUE) (SUBPARTITION `y` ENGINE = InnoDB COMMENT = 'xxxx' DATA DIRECTORY = '/var/data' INDEX DIRECTORY = '/var/index' MAX_ROWS = 70000 MIN_ROWS = 50 TABLESPACE = `innodb_file_per_table` NODEGROUP = 255))",
 		},
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 
 	// Check comment content.
-	parser := parser.New()
-	stmt, err := parser.ParseOneStmt("create table t (id int) partition by range (id) (partition p0 values less than (10) comment 'check')", "", "")
-	c.Assert(err, IsNil)
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("create table t (id int) partition by range (id) (partition p0 values less than (10) comment 'check')", "", "")
+	require.NoError(t, err)
 	createTable := stmt.(*ast.CreateTableStmt)
 	comment, ok := createTable.Partition.Definitions[0].Comment()
-	c.Assert(ok, IsTrue)
-	c.Assert(comment, Equals, "check")
+	require.True(t, ok)
+	require.Equal(t, "check", comment)
 }
 
-func (s *testParserSuite) TestTablePartitionNameList(c *C) {
+func TestTablePartitionNameList(t *testing.T) {
 	table := []testCase{
 		{`select * from t partition (p0,p1)`, true, ""},
 	}
 
-	parser := parser.New()
-	for _, tt := range table {
-		stmt, _, err := parser.Parse(tt.src, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range table {
+		stmt, _, err := p.Parse(tbl.src, "", "")
+		require.NoError(t, err)
 
 		sel := stmt[0].(*ast.SelectStmt)
 		source, ok := sel.From.TableRefs.Left.(*ast.TableSource)
-		c.Assert(ok, IsTrue)
+		require.True(t, ok)
 		tableName, ok := source.Source.(*ast.TableName)
-		c.Assert(ok, IsTrue)
-		c.Assert(len(tableName.PartitionNames), Equals, 2)
-		c.Assert(tableName.PartitionNames[0], Equals, model.CIStr{O: "p0", L: "p0"})
-		c.Assert(tableName.PartitionNames[1], Equals, model.CIStr{O: "p1", L: "p1"})
+		require.True(t, ok)
+		require.Len(t, tableName.PartitionNames, 2)
+		require.Equal(t, model.CIStr{O: "p0", L: "p0"}, tableName.PartitionNames[0])
+		require.Equal(t, model.CIStr{O: "p1", L: "p1"}, tableName.PartitionNames[1])
 	}
 }
 
-func (s *testParserSuite) TestNotExistsSubquery(c *C) {
+func TestNotExistsSubquery(t *testing.T) {
 	table := []testCase{
 		{`select * from t1 where not exists (select * from t2 where t1.a = t2.a)`, true, ""},
 	}
 
-	parser := parser.New()
-	for _, tt := range table {
-		stmt, _, err := parser.Parse(tt.src, "", "")
-		c.Assert(err, IsNil)
+	p := parser.New()
+	for _, tbl := range table {
+		stmt, _, err := p.Parse(tbl.src, "", "")
+		require.NoError(t, err)
 
 		sel := stmt[0].(*ast.SelectStmt)
 		exists, ok := sel.Where.(*ast.ExistsSubqueryExpr)
-		c.Assert(ok, IsTrue)
-		c.Assert(exists.Not, Equals, tt.ok)
+		require.True(t, ok)
+		require.Equal(t, tbl.ok, exists.Not)
 	}
 }
 
-func (s *testParserSuite) TestWindowFunctionIdentifier(c *C) {
+func TestWindowFunctionIdentifier(t *testing.T) {
 	var table []testCase
-	s.enableWindowFunc = true
 	for key := range parser.WindowFuncTokenMapForTest {
 		table = append(table, testCase{fmt.Sprintf("select 1 %s", key), false, fmt.Sprintf("SELECT 1 AS `%s`", key)})
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, true)
 
-	s.enableWindowFunc = false
 	for i := range table {
 		table[i].ok = true
 	}
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
-func (s *testParserSuite) TestWindowFunctions(c *C) {
+func TestWindowFunctions(t *testing.T) {
 	table := []testCase{
 		// For window function descriptions.
 		// See https://dev.mysql.com/doc/refman/8.0/en/window-function-descriptions.html
@@ -4680,7 +5713,7 @@ func (s *testParserSuite) TestWindowFunctions(c *C) {
 		{`SELECT AVG(val) OVER (PARTITION BY subject ORDER BY time ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (PARTITION BY `subject` ORDER BY `time` ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM `t`"},
 		{`SELECT AVG(val) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM `t`"},
 		{`SELECT AVG(val) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) FROM `t`"},
-		{`SELECT AVG(val) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL '2:30' MINUTE_SECOND FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL '2:30' MINUTE_SECOND FOLLOWING) FROM `t`"},
+		{`SELECT AVG(val) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL '2:30' MINUTE_SECOND FOLLOWING) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN INTERVAL 5 DAY PRECEDING AND INTERVAL _UTF8MB4'2:30' MINUTE_SECOND FOLLOWING) FROM `t`"},
 		{`SELECT AVG(val) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM `t`"},
 		{`SELECT AVG(val) OVER (RANGE CURRENT ROW) FROM t;`, true, "SELECT AVG(`val`) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW) FROM `t`"},
 
@@ -4688,24 +5721,27 @@ func (s *testParserSuite) TestWindowFunctions(c *C) {
 		// See https://dev.mysql.com/doc/refman/8.0/en/window-functions-named-windows.html
 		{`SELECT RANK() OVER (w) FROM t WINDOW w AS (ORDER BY val);`, true, "SELECT RANK() OVER (`w`) FROM `t` WINDOW `w` AS (ORDER BY `val`)"},
 		{`SELECT RANK() OVER w FROM t WINDOW w AS ();`, true, "SELECT RANK() OVER `w` FROM `t` WINDOW `w` AS ()"},
-		{`SELECT FIRST_VALUE(year) OVER (w ORDER BY year ASC) AS first FROM sales WINDOW w AS (PARTITION BY country);`, true, "SELECT FIRST_VALUE(`year`) OVER (`w` ORDER BY `year`) AS `first` FROM `sales` WINDOW `w` AS (PARTITION BY `country`)"},
+		{`SELECT FIRST_VALUE(year) OVER (w ORDER BY year) AS first FROM sales WINDOW w AS (PARTITION BY country);`, true, "SELECT FIRST_VALUE(`year`) OVER (`w` ORDER BY `year`) AS `first` FROM `sales` WINDOW `w` AS (PARTITION BY `country`)"},
 		{`SELECT RANK() OVER (w1) FROM t WINDOW w1 AS (w2), w2 AS (), w3 AS (w1);`, true, "SELECT RANK() OVER (`w1`) FROM `t` WINDOW `w1` AS (`w2`),`w2` AS (),`w3` AS (`w1`)"},
 		{`SELECT RANK() OVER w1 FROM t WINDOW w1 AS (w2), w2 AS (w3), w3 AS (w1);`, true, "SELECT RANK() OVER `w1` FROM `t` WINDOW `w1` AS (`w2`),`w2` AS (`w3`),`w3` AS (`w1`)"},
 
-		// For tidb_parse_tso
+		// For TSO functions
 		{`select tidb_parse_tso(1)`, true, "SELECT TIDB_PARSE_TSO(1)"},
+		{`select tidb_bounded_staleness('2015-09-21 00:07:01', NOW())`, true, "SELECT TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', NOW())"},
+		{`select tidb_bounded_staleness(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())`, true, "SELECT TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{`select tidb_bounded_staleness('2015-09-21 00:07:01', '2021-04-27 11:26:13')`, true, "SELECT TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', _UTF8MB4'2021-04-27 11:26:13')"},
+
 		{`select from_unixtime(404411537129996288)`, true, "SELECT FROM_UNIXTIME(404411537129996288)"},
 		{`select from_unixtime(404411537129996288.22)`, true, "SELECT FROM_UNIXTIME(404411537129996288.22)"},
 	}
-	s.enableWindowFunc = true
-	s.RunTest(c, table)
+	RunTest(t, table, true)
 }
 
 type windowFrameBoundChecker struct {
 	fb     *ast.FrameBound
 	exprRc int
 	unit   ast.TimeUnitType
-	c      *C
+	t      *testing.T
 }
 
 // Enter implements ast.Visitor interface.
@@ -4714,7 +5750,7 @@ func (wfc *windowFrameBoundChecker) Enter(inNode ast.Node) (outNode ast.Node, sk
 		wfc.fb = inNode.(*ast.FrameBound)
 		if wfc.fb.Unit != ast.TimeUnitInvalid {
 			_, ok := wfc.fb.Expr.(ast.ValueExpr)
-			wfc.c.Assert(ok, IsFalse)
+			require.False(wfc.t, ok)
 		}
 	}
 	return inNode, false
@@ -4735,10 +5771,10 @@ func (wfc *windowFrameBoundChecker) Leave(inNode ast.Node) (node ast.Node, ok bo
 }
 
 // For issue #51
-// See https://github.com/arana-db/parser/pull/51 for details
-func (s *testParserSuite) TestVisitFrameBound(c *C) {
-	parser := parser.New()
-	parser.EnableWindowFunc(true)
+// See https://github.com/pingcap/parser/pull/51 for details
+func TestVisitFrameBound(t *testing.T) {
+	p := parser.New()
+	p.EnableWindowFunc(true)
 	table := []struct {
 		s      string
 		exprRc int
@@ -4748,23 +5784,23 @@ func (s *testParserSuite) TestVisitFrameBound(c *C) {
 		{`SELECT AVG(val) OVER (RANGE 5 PRECEDING) FROM t;`, 1, ast.TimeUnitInvalid},
 		{`SELECT AVG(val) OVER () FROM t;`, 0, ast.TimeUnitInvalid},
 	}
-	for _, t := range table {
-		stmt, err := parser.ParseOneStmt(t.s, "", "")
-		c.Assert(err, IsNil)
-		checker := windowFrameBoundChecker{c: c}
+	for _, tbl := range table {
+		stmt, err := p.ParseOneStmt(tbl.s, "", "")
+		require.NoError(t, err)
+		checker := windowFrameBoundChecker{t: t}
 		stmt.Accept(&checker)
-		c.Assert(checker.exprRc, Equals, t.exprRc)
-		c.Assert(checker.unit, Equals, t.unit)
+		require.Equal(t, tbl.exprRc, checker.exprRc)
+		require.Equal(t, tbl.unit, checker.unit)
 	}
 
 }
 
-func (s *testParserSuite) TestFieldText(c *C) {
-	parser := parser.New()
-	stmts, _, err := parser.Parse("select a from t", "", "")
-	c.Assert(err, IsNil)
+func TestFieldText(t *testing.T) {
+	p := parser.New()
+	stmts, _, err := p.Parse("select a from t", "", "")
+	require.NoError(t, err)
 	tmp := stmts[0].(*ast.SelectStmt)
-	c.Assert(tmp.Fields.Fields[0].Text(), Equals, "a")
+	require.Equal(t, "a", tmp.Fields.Fields[0].Text())
 
 	sqls := []string{
 		"trace select a from t",
@@ -4772,24 +5808,24 @@ func (s *testParserSuite) TestFieldText(c *C) {
 		"trace format = 'json' select a from t",
 	}
 	for _, sql := range sqls {
-		stmts, _, err = parser.Parse(sql, "", "")
-		c.Assert(err, IsNil)
+		stmts, _, err = p.Parse(sql, "", "")
+		require.NoError(t, err)
 		traceStmt := stmts[0].(*ast.TraceStmt)
-		c.Assert(traceStmt.Text(), Equals, sql)
-		c.Assert(traceStmt.Stmt.Text(), Equals, "select a from t")
+		require.Equal(t, sql, traceStmt.Text())
+		require.Equal(t, "select a from t", traceStmt.Stmt.Text())
 	}
 }
 
-// See https://github.com/arana-db/parser/issue/94
-func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
-	parser := parser.New()
+// See https://github.com/pingcap/parser/issue/94
+func TestQuotedSystemVariables(t *testing.T) {
+	p := parser.New()
 
-	st, err := parser.ParseOneStmt(
+	st, err := p.ParseOneStmt(
 		"select @@Sql_Mode, @@`SQL_MODE`, @@session.`sql_mode`, @@global.`s ql``mode`, @@session.'sql\\nmode', @@local.\"sql\\\"mode\";",
 		"",
 		"",
 	)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	ss := st.(*ast.SelectStmt)
 	expected := []*ast.VariableExpr{
 		{
@@ -4830,27 +5866,27 @@ func (s *testParserSuite) TestQuotedSystemVariables(c *C) {
 		},
 	}
 
-	c.Assert(len(ss.Fields.Fields), Equals, len(expected))
+	require.Len(t, ss.Fields.Fields, len(expected))
 	for i, field := range ss.Fields.Fields {
 		ve := field.Expr.(*ast.VariableExpr)
-		cmt := Commentf("field %d, ve = %v", i, ve)
-		c.Assert(ve.Name, Equals, expected[i].Name, cmt)
-		c.Assert(ve.IsGlobal, Equals, expected[i].IsGlobal, cmt)
-		c.Assert(ve.IsSystem, Equals, expected[i].IsSystem, cmt)
-		c.Assert(ve.ExplicitScope, Equals, expected[i].ExplicitScope, cmt)
+		comment := fmt.Sprintf("field %d, ve = %v", i, ve)
+		require.Equal(t, expected[i].Name, ve.Name, comment)
+		require.Equal(t, expected[i].IsGlobal, ve.IsGlobal, comment)
+		require.Equal(t, expected[i].IsSystem, ve.IsSystem, comment)
+		require.Equal(t, expected[i].ExplicitScope, ve.ExplicitScope, comment)
 	}
 }
 
-// See https://github.com/arana-db/parser/issue/95
-func (s *testParserSuite) TestQuotedVariableColumnName(c *C) {
-	parser := parser.New()
+// See https://github.com/pingcap/parser/issue/95
+func TestQuotedVariableColumnName(t *testing.T) {
+	p := parser.New()
 
-	st, err := parser.ParseOneStmt(
+	st, err := p.ParseOneStmt(
 		"select @abc, @`abc`, @'aBc', @\"AbC\", @6, @`6`, @'6', @\"6\", @@sql_mode, @@`sql_mode`, @;",
 		"",
 		"",
 	)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	ss := st.(*ast.SelectStmt)
 	expected := []string{
 		"@abc",
@@ -4866,85 +5902,102 @@ func (s *testParserSuite) TestQuotedVariableColumnName(c *C) {
 		"@",
 	}
 
-	c.Assert(len(ss.Fields.Fields), Equals, len(expected))
+	require.Len(t, ss.Fields.Fields, len(expected))
 	for i, field := range ss.Fields.Fields {
-		c.Assert(field.Text(), Equals, expected[i])
+		require.Equal(t, expected[i], field.Text())
 	}
 }
 
-func (s *testParserSuite) TestCharset(c *C) {
-	parser := parser.New()
+func TestCharset(t *testing.T) {
+	p := parser.New()
 
-	st, err := parser.ParseOneStmt("ALTER SCHEMA GLOBAL DEFAULT CHAR SET utf8mb4", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.AlterDatabaseStmt), NotNil)
-	st, err = parser.ParseOneStmt("ALTER DATABASE CHAR SET = utf8mb4", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.AlterDatabaseStmt), NotNil)
-	st, err = parser.ParseOneStmt("ALTER DATABASE DEFAULT CHAR SET = utf8mb4", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.AlterDatabaseStmt), NotNil)
+	st, err := p.ParseOneStmt("ALTER SCHEMA GLOBAL DEFAULT CHAR SET utf8mb4", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.AlterDatabaseStmt))
+	st, err = p.ParseOneStmt("ALTER DATABASE CHAR SET = utf8mb4", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.AlterDatabaseStmt))
+	st, err = p.ParseOneStmt("ALTER DATABASE DEFAULT CHAR SET = utf8mb4", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.AlterDatabaseStmt))
 }
 
-func (s *testParserSuite) TestFulltextSearch(c *C) {
-	parser := parser.New()
+func TestFulltextSearch(t *testing.T) {
+	p := parser.New()
 
-	st, err := parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search')", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.SelectStmt), NotNil)
+	st, err := p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search')", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.SelectStmt))
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH() AGAINST('search')", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(st, IsNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH() AGAINST('search')", "", "")
+	require.Error(t, err)
+	require.Nil(t, st)
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST()", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(st, IsNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST()", "", "")
+	require.Error(t, err)
+	require.Nil(t, st)
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN)", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(st, IsNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN)", "", "")
+	require.Error(t, err)
+	require.Nil(t, st)
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN BOOLEAN MODE WITH QUERY EXPANSION)", "", "")
-	c.Assert(err, NotNil)
-	c.Assert(st, IsNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN BOOLEAN MODE WITH QUERY EXPANSION)", "", "")
+	require.Error(t, err)
+	require.Nil(t, st)
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN NATURAL LANGUAGE MODE)", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.SelectStmt), NotNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN NATURAL LANGUAGE MODE)", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.SelectStmt))
 	writer := bytes.NewBufferString("")
 	st.(*ast.SelectStmt).Where.Format(writer)
-	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\")")
+	require.Equal(t, "MATCH(title,content) AGAINST(\"search\")", writer.String())
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN BOOLEAN MODE)", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.SelectStmt), NotNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN BOOLEAN MODE)", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.SelectStmt))
 	writer.Reset()
 	st.(*ast.SelectStmt).Where.Format(writer)
-	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\" IN BOOLEAN MODE)")
+	require.Equal(t, "MATCH(title,content) AGAINST(\"search\" IN BOOLEAN MODE)", writer.String())
 
-	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' WITH QUERY EXPANSION)", "", "")
-	c.Assert(err, IsNil)
-	c.Assert(st.(*ast.SelectStmt), NotNil)
+	st, err = p.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' WITH QUERY EXPANSION)", "", "")
+	require.NoError(t, err)
+	require.NotNil(t, st.(*ast.SelectStmt))
 	writer.Reset()
 	st.(*ast.SelectStmt).Where.Format(writer)
-	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\" WITH QUERY EXPANSION)")
+	require.Equal(t, "MATCH(title,content) AGAINST(\"search\" WITH QUERY EXPANSION)", writer.String())
 }
 
-func (s *testParserSuite) TestStartTransaction(c *C) {
+func TestStartTransaction(t *testing.T) {
 	cases := []testCase{
 		{"START TRANSACTION READ WRITE", true, "START TRANSACTION"},
+		{"START TRANSACTION WITH CONSISTENT SNAPSHOT", true, "START TRANSACTION"},
+		{"START TRANSACTION WITH CAUSAL CONSISTENCY ONLY", true, "START TRANSACTION WITH CAUSAL CONSISTENCY ONLY"},
 		{"START TRANSACTION READ ONLY", true, "START TRANSACTION READ ONLY"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND", false, ""},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND STRONG", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND STRONG"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MAX STALENESS '00:00:10'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MAX STALENESS '00:00:10'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND EXACT STALENESS '00:00:05'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND EXACT STALENESS '00:00:05'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND READ TIMESTAMP '2019-11-04 00:00:00'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND READ TIMESTAMP '2019-11-04 00:00:00'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN READ TIMESTAMP '2019-11-04 00:00:00'", true, "START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN READ TIMESTAMP '2019-11-04 00:00:00'"},
-		{"START TRANSACTION READ ONLY WITH TIMESTAMP BOUND MIN TIMESTAMP '2019-11-04 00:00:00'", false, ""},
+		{"START TRANSACTION READ ONLY AS OF", false, ""},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP", false, ""},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP '2015-09-21 00:07:01'", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP _UTF8MB4'2015-09-21 00:07:01'"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', NOW())", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', NOW())"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', '2021-04-27 11:26:13')", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', _UTF8MB4'2021-04-27 11:26:13')"},
 	}
 
-	s.RunTest(c, cases)
+	RunTest(t, cases, false)
+}
+
+func TestSignedInt64OutOfRange(t *testing.T) {
+	p := parser.New()
+	cases := []string{
+		"recover table by job 18446744073709551612",
+		"recover table t 18446744073709551612",
+		"admin check index t idx (0, 18446744073709551612)",
+		"create user abc@def with max_queries_per_hour 18446744073709551612",
+	}
+
+	for _, s := range cases {
+		_, err := p.ParseOneStmt(s, "", "")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "out of range")
+	}
 }
 
 // CleanNodeText set the text of node and all child node empty.
@@ -4961,7 +6014,8 @@ type nodeTextCleaner struct {
 
 // Enter implements Visitor interface.
 func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
-	in.SetText("")
+	in.SetText(nil, "")
+	in.SetOriginTextPosition(0)
 	switch node := in.(type) {
 	case *ast.CreateTableStmt:
 		for _, opt := range node.Options {
@@ -5002,13 +6056,14 @@ func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren b
 		}
 	case *ast.FuncCallExpr:
 		node.FnName.O = strings.ToLower(node.FnName.O)
+		node.SetOriginTextPosition(0)
 	case *ast.AggregateFuncExpr:
 		node.F = strings.ToLower(node.F)
 	case *ast.SelectField:
 		node.Offset = 0
 	case *test_driver.ValueExpr:
 		if node.Kind() == test_driver.KindMysqlDecimal {
-			node.GetMysqlDecimal().FromString(node.GetMysqlDecimal().ToString())
+			_ = node.GetMysqlDecimal().FromString(node.GetMysqlDecimal().ToString())
 		}
 	case *ast.GrantStmt:
 		var privs []*ast.PrivElem
@@ -5026,6 +6081,8 @@ func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren b
 			}
 		}
 		node.Specs = specs
+	case *ast.Join:
+		node.ExplicitParens = false
 	}
 	return in, false
 }
@@ -5036,7 +6093,7 @@ func (checker *nodeTextCleaner) Leave(in ast.Node) (out ast.Node, ok bool) {
 }
 
 // For index advisor
-func (s *testParserSuite) TestIndexAdviseStmt(c *C) {
+func TestIndexAdviseStmt(t *testing.T) {
 	table := []testCase{
 		{"INDEX ADVISE INFILE '/tmp/t.sql'", true, "INDEX ADVISE INFILE '/tmp/t.sql'"},
 		{"INDEX ADVISE LOCAL INFILE '/tmp/t.sql'", true, "INDEX ADVISE LOCAL INFILE '/tmp/t.sql'"},
@@ -5092,11 +6149,11 @@ func (s *testParserSuite) TestIndexAdviseStmt(c *C) {
 		{"INDEX ADVISE INFILE '/tmp/t.sql' MAX_MINUTES -1 MAX_IDXNUM PER_TABLE 8 PER_DB 4 LINES STARTING BY 'ab' TERMINATED BY 'cd'", false, ""},
 	}
 
-	s.RunTest(c, table)
+	RunTest(t, table, false)
 }
 
 // For BRIE
-func (s *testParserSuite) TestBRIE(c *C) {
+func TestBRIE(t *testing.T) {
 	table := []testCase{
 		{"BACKUP DATABASE a TO 'local:///tmp/archive01/'", true, "BACKUP DATABASE `a` TO 'local:///tmp/archive01/'"},
 		{"BACKUP SCHEMA a TO 'local:///tmp/archive01/'", true, "BACKUP DATABASE `a` TO 'local:///tmp/archive01/'"},
@@ -5120,9 +6177,8 @@ func (s *testParserSuite) TestBRIE(c *C) {
 		{"backup database * to 'noop://' rate_limit 500 MB/second snapshot 5 minute ago", true, "BACKUP DATABASE * TO 'noop://' RATE_LIMIT = 500 MB/SECOND SNAPSHOT = 300000000 MICROSECOND AGO"},
 		{"backup database * to 'noop://' snapshot = '2020-03-18 18:13:54'", true, "BACKUP DATABASE * TO 'noop://' SNAPSHOT = '2020-03-18 18:13:54'"},
 		{"backup database * to 'noop://' snapshot = 1234567890", true, "BACKUP DATABASE * TO 'noop://' SNAPSHOT = 1234567890"},
-		{"restore table g from 'noop://' concurrency 40 checksum 0 online 1", true, "RESTORE TABLE `g` FROM 'noop://' CONCURRENCY = 40 CHECKSUM = 0 ONLINE = 1"},
+		{"restore table g from 'noop://' concurrency 40 checksum 0 online 1", true, "RESTORE TABLE `g` FROM 'noop://' CONCURRENCY = 40 CHECKSUM = OFF ONLINE = 1"},
 		{
-			// FIXME: should we really include the access key in the Restore() text???
 			"backup table x to 's3://bucket/path/?endpoint=https://test-cluster-s3.local&access-key=aaaaaaaaa&secret-access-key=bbbbbbbb&force-path-style=1'",
 			true,
 			"BACKUP TABLE `x` TO 's3://bucket/path/?endpoint=https://test-cluster-s3.local&access-key=aaaaaaaaa&secret-access-key=bbbbbbbb&force-path-style=1'",
@@ -5137,41 +6193,439 @@ func (s *testParserSuite) TestBRIE(c *C) {
 			true,
 			"RESTORE DATABASE * FROM 'gcs://bucket/path/?endpoint=https://test-cluster.gcs.local&storage-class=coldline&predefined-acl=OWNER&credentials-file=/data/private/creds.json'",
 		},
-
-		{"IMPORT DATABASE * FROM 'file:///data/dump'", true, "IMPORT DATABASE * FROM 'file:///data/dump'"},
-		{
-			"import schema * from 'file:///d/' checkpoint false analyze false checksum false backend 'importer' tikv_importer '10.0.1.1:8287'",
-			true,
-			"IMPORT DATABASE * FROM 'file:///d/' CHECKPOINT = 0 ANALYZE = 0 CHECKSUM = 0 BACKEND = 'importer' TIKV_IMPORTER = '10.0.1.1:8287'",
-		},
-		{
-			"IMPORT DATABASE * FROM 'file:///d/' BACKEND TIDB ON DUPLICATE IGNORE SKIP_SCHEMA_FILES TRUE",
-			true,
-			"IMPORT DATABASE * FROM 'file:///d/' BACKEND = 'tidb' ON_DUPLICATE = 'ignore' SKIP_SCHEMA_FILES = 1",
-		},
-		{
-			"import schema * from 'file:///d/' csv_header = columns strict_format = true csv_backslash_escape = true csv_delimiter = '''' csv_not_null = false csv_null = 'Null' csv_separator = '|' csv_trim_last_separators = true",
-			true,
-			"IMPORT DATABASE * FROM 'file:///d/' CSV_HEADER = COLUMNS STRICT_FORMAT = 1 CSV_BACKSLASH_ESCAPE = 1 CSV_DELIMITER = '''' CSV_NOT_NULL = 0 CSV_NULL = 'Null' CSV_SEPARATOR = '|' CSV_TRIM_LAST_SEPARATORS = 1",
-		},
-		{"import table db1.tbl1 from 'file:///d/' csv_header = 0", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' CSV_HEADER = 0"},
-		{"import table db1.tbl1 from 'file:///d/' csv_header = 1", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' CSV_HEADER = 1"},
-		{"import table db1.tbl1 from 'file:///d/' csv_header = 9001", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' CSV_HEADER = 9001"},
-		{"import table db1.tbl1 from 'file:///d/' csv_header = fields", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' CSV_HEADER = COLUMNS"},
-		{"import table db1.tbl1 from 'file:///d/' csv_header = 'columns'", false, ""},
-		{"import table db1.tbl1 from 'file:///d/' on_duplicate = ignore", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' ON_DUPLICATE = 'ignore'"},
-		{"import table db1.tbl1 from 'file:///d/' on_duplicate = replace", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' ON_DUPLICATE = 'replace'"},
-		{"import table db1.tbl1 from 'file:///d/' on_duplicate = error", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' ON_DUPLICATE = 'error'"},
-		{"import table db1.tbl1 from 'file:///d/' backend = local", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' BACKEND = 'local'"},
-		{"import table db1.tbl1 from 'file:///d/' backend = tidb", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' BACKEND = 'tidb'"},
-		{"import table db1.tbl1 from 'file:///d/' backend = importer", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' BACKEND = 'importer'"},
-		{"import table db1.tbl1 from 'file:///d/' checkpoint = 'false'", false, ""},
-		{"import table db1.tbl1 from 'file:///d/' checkpoint = 30", true, "IMPORT TABLE `db1`.`tbl1` FROM 'file:///d/' CHECKPOINT = 1"},
-		{"import table db1.tbl1 from 'file:///d/' csv_null = null", false, ""},
-		{"import table db1.tbl1 from 'file:///d/' csv_null = false", false, ""},
-		{"import table db1.tbl1 from 'file:///d/' csv_null = 0", false, ""},
-		{"import table db1.tbl1 from 'file:///d/' csv_null = abcdefgh", false, ""},
+		{"restore table g from 'noop://' checksum off", true, "RESTORE TABLE `g` FROM 'noop://' CHECKSUM = OFF"},
+		{"restore table g from 'noop://' checksum optional", true, "RESTORE TABLE `g` FROM 'noop://' CHECKSUM = OPTIONAL"},
 	}
 
-	s.RunTest(c, table)
+	RunTest(t, table, false)
+}
+
+func TestPurge(t *testing.T) {
+	cases := []testCase{
+		{"purge import 100", true, "PURGE IMPORT 100"},
+		{"purge import abc", false, ""},
+	}
+	RunTest(t, cases, false)
+}
+
+func TestAsyncImport(t *testing.T) {
+	cases := []testCase{
+		{"create import test from 'file:///d/'", true, "CREATE IMPORT `test` FROM 'file:///d/'"},
+		{
+			"create import if not exists test from 'file:///d/' skip all csv_header = columns strict_format = true csv_backslash_escape = true",
+			true,
+			"CREATE IMPORT IF NOT EXISTS `test` FROM 'file:///d/' SKIP ALL CSV_HEADER = COLUMNS STRICT_FORMAT = 1 CSV_BACKSLASH_ESCAPE = 1",
+		},
+		{
+			"create import if not exists test from 'file:///d/' replace SKIP_SCHEMA_FILES TRUE",
+			true,
+			"CREATE IMPORT IF NOT EXISTS `test` FROM 'file:///d/' REPLACE SKIP_SCHEMA_FILES = 1",
+		},
+		{"create import test from 'file:///d/' csv_header = 0", true, "CREATE IMPORT `test` FROM 'file:///d/' CSV_HEADER = 0"},
+		{"create import test from 'file:///d/' csv_header = 1", true, "CREATE IMPORT `test` FROM 'file:///d/' CSV_HEADER = 1"},
+		{"create import test from 'file:///d/' csv_header = 9001", true, "CREATE IMPORT `test` FROM 'file:///d/' CSV_HEADER = 9001"},
+		{"create import test from 'file:///d/' csv_header = fields", true, "CREATE IMPORT `test` FROM 'file:///d/' CSV_HEADER = COLUMNS"},
+		{"create import test from 'file:///d/' csv_header = 'columns'", false, ""},
+		{"create import test from 'file:///d/' on_duplicate = ignore", true, "CREATE IMPORT `test` FROM 'file:///d/' ON_DUPLICATE = 'ignore'"},
+		{"create import test from 'file:///d/' on_duplicate = replace", true, "CREATE IMPORT `test` FROM 'file:///d/' ON_DUPLICATE = 'replace'"},
+		{"create import test from 'file:///d/' on_duplicate = error", true, "CREATE IMPORT `test` FROM 'file:///d/' ON_DUPLICATE = 'error'"},
+		{"create import test from 'file:///d/' backend = local", true, "CREATE IMPORT `test` FROM 'file:///d/' BACKEND = 'local'"},
+		{"create import test from 'file:///d/' backend = tidb", true, "CREATE IMPORT `test` FROM 'file:///d/' BACKEND = 'tidb'"},
+		{"create import test from 'file:///d/' backend = importer", true, "CREATE IMPORT `test` FROM 'file:///d/' BACKEND = 'importer'"},
+		{"create import test from 'file:///d/' checkpoint = 'false'", false, ""},
+		{"create import test from 'file:///d/' checkpoint = 30", true, "CREATE IMPORT `test` FROM 'file:///d/' CHECKPOINT = 1"},
+		{"create import test from 'file:///d/' csv_null = null", false, ""},
+		{"create import test from 'file:///d/' csv_null = false", false, ""},
+		{"create import test from 'file:///d/' csv_null = 0", false, ""},
+		{"create import test from 'file:///d/' csv_null = abcdefgh", false, ""},
+		{"create import test from 'file:///d/' resume 1", true, "CREATE IMPORT `test` FROM 'file:///d/' RESUME = 1"},
+		{"create import test from 'file:///d/' resume abc", false, ""},
+		{"create import test from 'file:///d/' analyze = optional", true, "CREATE IMPORT `test` FROM 'file:///d/' ANALYZE = OPTIONAL"},
+		{"create import test from 'file:///d/' analyze = abc", false, ""},
+		// still support boolean checksum/analyze, non-zero represent true thus goes REQUIRED
+		{"create import test from 'file:///d/' checksum true analyze 2", true, "CREATE IMPORT `test` FROM 'file:///d/' CHECKSUM = REQUIRED ANALYZE = REQUIRED"},
+		{"stop import test", true, "STOP IMPORT `test`"},
+		{"stop import if running test", true, "STOP IMPORT IF RUNNING `test`"},
+		{"resume import test", true, "RESUME IMPORT `test`"},
+		{"resume import if not running test", true, "RESUME IMPORT IF NOT RUNNING `test`"},
+		// empty alter import is OK
+		{"alter import test", true, "ALTER IMPORT `test`"},
+		{"alter import test truncate all", true, "ALTER IMPORT `test` TRUNCATE ALL"},
+		{"alter import test skip duplicate csv_delimiter = '''' truncate errors table tbl", true, "ALTER IMPORT `test` SKIP DUPLICATE CSV_DELIMITER = '''' TRUNCATE ERRORS TABLE `tbl`"},
+		{"alter import test truncate errors table db.tbl", true, "ALTER IMPORT `test` TRUNCATE ERRORS TABLE `db`.`tbl`"},
+		{"alter import test truncate errors table db.tb1, tb2", true, "ALTER IMPORT `test` TRUNCATE ERRORS TABLE `db`.`tb1`, `tb2`"},
+		{"drop import test", true, "DROP IMPORT `test`"},
+		{"drop import if exists test", true, "DROP IMPORT IF EXISTS `test`"},
+		{"show import test", true, "SHOW IMPORT `test`"},
+		{"show import test table tbl", true, "SHOW IMPORT `test` TABLE `tbl`"},
+		{"show import test errors table tbl", true, "SHOW IMPORT `test` ERRORS TABLE `tbl`"},
+		{"show import test errors table tb1, db.tb2", true, "SHOW IMPORT `test` ERRORS TABLE `tb1`, `db`.`tb2`"},
+	}
+	RunTest(t, cases, false)
+}
+
+func TestStatisticsOps(t *testing.T) {
+	table := []testCase{
+		{"create statistics stats1 (cardinality) on t(a,b,c)", true, "CREATE STATISTICS `stats1` (CARDINALITY) ON `t`(`a`, `b`, `c`)"},
+		{"create statistics stats2 (dependency) on t(a,b)", true, "CREATE STATISTICS `stats2` (DEPENDENCY) ON `t`(`a`, `b`)"},
+		{"create statistics stats3 (correlation) on t(a,b)", true, "CREATE STATISTICS `stats3` (CORRELATION) ON `t`(`a`, `b`)"},
+		{"create statistics stats3 on t(a,b)", false, ""},
+		{"create statistics if not exists stats1 (cardinality) on t(a,b,c)", true, "CREATE STATISTICS IF NOT EXISTS `stats1` (CARDINALITY) ON `t`(`a`, `b`, `c`)"},
+		{"create statistics if not exists stats2 (dependency) on t(a,b)", true, "CREATE STATISTICS IF NOT EXISTS `stats2` (DEPENDENCY) ON `t`(`a`, `b`)"},
+		{"create statistics if not exists stats3 (correlation) on t(a,b)", true, "CREATE STATISTICS IF NOT EXISTS `stats3` (CORRELATION) ON `t`(`a`, `b`)"},
+		{"create statistics if not exists stats3 on t(a,b)", false, ""},
+		{"create statistics stats1(cardinality) on t(a,b,c)", true, "CREATE STATISTICS `stats1` (CARDINALITY) ON `t`(`a`, `b`, `c`)"},
+		{"drop statistics stats1", true, "DROP STATISTICS `stats1`"},
+	}
+	RunTest(t, table, false)
+
+	p := parser.New()
+	sms, _, err := p.Parse("create statistics if not exists stats1 (cardinality) on t(a,b,c)", "", "")
+	require.NoError(t, err)
+	v, ok := sms[0].(*ast.CreateStatisticsStmt)
+	require.True(t, ok)
+	require.True(t, v.IfNotExists)
+	require.Equal(t, "stats1", v.StatsName)
+	require.Equal(t, ast.StatsTypeCardinality, v.StatsType)
+	require.Equal(t, model.CIStr{O: "t", L: "t"}, v.Table.Name)
+	require.Len(t, v.Columns, 3)
+	require.Equal(t, model.CIStr{O: "a", L: "a"}, v.Columns[0].Name)
+	require.Equal(t, model.CIStr{O: "b", L: "b"}, v.Columns[1].Name)
+	require.Equal(t, model.CIStr{O: "c", L: "c"}, v.Columns[2].Name)
+}
+
+func TestHighNotPrecedenceMode(t *testing.T) {
+	p := parser.New()
+	var sb strings.Builder
+
+	sms, _, err := p.Parse("SELECT NOT 1 BETWEEN -5 AND 5", "", "")
+	require.NoError(t, err)
+	v, ok := sms[0].(*ast.SelectStmt)
+	require.True(t, ok)
+	v1, ok := v.Fields.Fields[0].Expr.(*ast.UnaryOperationExpr)
+	require.True(t, ok)
+	require.Equal(t, opcode.Not, v1.Op)
+	err = sms[0].Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
+	require.NoError(t, err)
+	restoreSQL := sb.String()
+	require.Equal(t, "SELECT NOT 1 BETWEEN -5 AND 5", restoreSQL)
+	sb.Reset()
+
+	sms, _, err = p.Parse("SELECT !1 BETWEEN -5 AND 5", "", "")
+	require.NoError(t, err)
+	v, ok = sms[0].(*ast.SelectStmt)
+	require.True(t, ok)
+	_, ok = v.Fields.Fields[0].Expr.(*ast.BetweenExpr)
+	require.True(t, ok)
+	err = sms[0].Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
+	require.NoError(t, err)
+	restoreSQL = sb.String()
+	require.Equal(t, "SELECT !1 BETWEEN -5 AND 5", restoreSQL)
+	sb.Reset()
+
+	p = parser.New()
+	p.SetSQLMode(mysql.ModeHighNotPrecedence)
+	sms, _, err = p.Parse("SELECT NOT 1 BETWEEN -5 AND 5", "", "")
+	require.NoError(t, err)
+	v, ok = sms[0].(*ast.SelectStmt)
+	require.True(t, ok)
+	_, ok = v.Fields.Fields[0].Expr.(*ast.BetweenExpr)
+	require.True(t, ok)
+	err = sms[0].Restore(NewRestoreCtx(DefaultRestoreFlags, &sb))
+	require.NoError(t, err)
+	restoreSQL = sb.String()
+	require.Equal(t, "SELECT !1 BETWEEN -5 AND 5", restoreSQL)
+}
+
+// For CTE
+func TestCTE(t *testing.T) {
+	table := []testCase{
+		{"WITH `cte` AS (SELECT 1,2) SELECT `col1`,`col2` FROM `cte`", true, "WITH `cte` AS (SELECT 1,2) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH `cte` (col1, col2) AS (SELECT 1,2 UNION ALL SELECT 3,4) SELECT col1, col2 FROM cte;", true, "WITH `cte` (`col1`, `col2`) AS (SELECT 1,2 UNION ALL SELECT 3,4) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH `cte` AS (SELECT 1,2), cte2 as (select 3) SELECT `col1`,`col2` FROM `cte`", true, "WITH `cte` AS (SELECT 1,2), `cte2` AS (SELECT 3) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH RECURSIVE cte (n) AS (  SELECT 1  UNION ALL  SELECT n + 1 FROM cte WHERE n < 5)SELECT * FROM cte;", true, "WITH RECURSIVE `cte` (`n`) AS (SELECT 1 UNION ALL SELECT `n`+1 FROM `cte` WHERE `n`<5) SELECT * FROM `cte`"},
+		{"with cte(a) as (select 1) update t, cte set t.a=1  where t.a=cte.a;", true, "WITH `cte` (`a`) AS (SELECT 1) UPDATE (`t`) JOIN `cte` SET `t`.`a`=1 WHERE `t`.`a`=`cte`.`a`"},
+		{"with cte(a) as (select 1) delete t from t, cte where t.a=cte.a;", true, "WITH `cte` (`a`) AS (SELECT 1) DELETE `t` FROM (`t`) JOIN `cte` WHERE `t`.`a`=`cte`.`a`"},
+		{"WITH cte1 AS (SELECT 1) SELECT * FROM (WITH cte2 AS (SELECT 2) SELECT * FROM cte2 JOIN cte1) AS dt;", true, "WITH `cte1` AS (SELECT 1) SELECT * FROM (WITH `cte2` AS (SELECT 2) SELECT * FROM `cte2` JOIN `cte1`) AS `dt`"},
+		{"WITH cte AS (SELECT 1) SELECT /*+ MAX_EXECUTION_TIME(1000) */ * FROM cte;", true, "WITH `cte` AS (SELECT 1) SELECT /*+ MAX_EXECUTION_TIME(1000)*/ * FROM `cte`"},
+		{"with cte as (table t) table cte;", true, "WITH `cte` AS (TABLE `t`) TABLE `cte`"},
+		{"with cte as (select 1) select 1 union with cte as (select 1) select * from cte;", false, ""},
+		{"with cte as (select 1) (select 1);", true, "WITH `cte` AS (SELECT 1) (SELECT 1)"},
+		{"with cte as (select 1) (select 1 union select 1)", true, "WITH `cte` AS (SELECT 1) (SELECT 1 UNION SELECT 1)"},
+		{"select * from (with cte as (select 1) select 1 union select 2) qn", true, "SELECT * FROM (WITH `cte` AS (SELECT 1) SELECT 1 UNION SELECT 2) AS `qn`"},
+		{"select * from t where 1 > (with cte as (select 2) select * from cte)", true, "SELECT * FROM `t` WHERE 1>(WITH `cte` AS (SELECT 2) SELECT * FROM `cte`)"},
+		{"( with cte(n) as ( select 1 )  select n+1 from cte  union select n+2 from cte) union select 1", true, "(WITH `cte` (`n`) AS (SELECT 1) SELECT `n`+1 FROM `cte` UNION SELECT `n`+2 FROM `cte`) UNION SELECT 1"},
+		{"( with cte(n) as ( select 1 )  select n+1 from cte) union select 1", true, "(WITH `cte` (`n`) AS (SELECT 1) SELECT `n`+1 FROM `cte`) UNION SELECT 1"},
+		{"( with cte(n) as ( select 1 )  (select n+1 from cte)) union select 1", true, "(WITH `cte` (`n`) AS (SELECT 1) (SELECT `n`+1 FROM `cte`)) UNION SELECT 1"},
+	}
+
+	RunTest(t, table, false)
+}
+
+func TestAsOfClause(t *testing.T) {
+	table := []testCase{
+		{"SELECT * FROM `t` AS /* comment */ a;", true, "SELECT * FROM `t` AS `a`"},
+		{"SELECT * FROM `t` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW());", true, "SELECT * FROM `t` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"select * from `t` as of timestamp '2021-04-15 00:00:00'", true, "SELECT * FROM `t` AS OF TIMESTAMP _UTF8MB4'2021-04-15 00:00:00'"},
+		{"SELECT * FROM (`a` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())) JOIN `b` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW());", true, "SELECT * FROM (`a` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())) JOIN `b` AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"INSERT INTO `employees` (SELECT * FROM `employees` AS OF TIMESTAMP (DATE_SUB(NOW(), INTERVAL _UTF8MB4'60' MINUTE)) NOT IN (SELECT * FROM `employees`))", true, "INSERT INTO `employees` (SELECT * FROM `employees` AS OF TIMESTAMP (DATE_SUB(NOW(), INTERVAL _UTF8MB4'60' MINUTE)) NOT IN (SELECT * FROM `employees`))"},
+		{"SET TRANSACTION READ ONLY as of timestamp '2021-04-21 00:42:12'", true, "SET @@SESSION.`tx_read_ts`=_UTF8MB4'2021-04-21 00:42:12'"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP '2015-09-21 00:07:01'", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP _UTF8MB4'2015-09-21 00:07:01'"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', NOW())", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', NOW())"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', '2021-04-27 11:26:13')", true, "START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_BOUNDED_STALENESS(_UTF8MB4'2015-09-21 00:07:01', _UTF8MB4'2021-04-27 11:26:13')"},
+	}
+	RunTest(t, table, false)
+}
+
+// For `PARTITION BY [LINEAR] KEY ALGORITHM` syntax
+func TestPartitionKeyAlgorithm(t *testing.T) {
+	table := []testCase{
+		{"CREATE TABLE t  (c1 integer ,c2 integer) PARTITION BY LINEAR KEY ALGORITHM = 1 (c1,c2) PARTITIONS 4", true, "CREATE TABLE `t` (`c1` INT,`c2` INT) PARTITION BY LINEAR KEY ALGORITHM = 1 (`c1`,`c2`) PARTITIONS 4"},
+		{"CREATE TABLE t  (c1 integer ,c2 integer) PARTITION BY LINEAR KEY ALGORITHM = -1 (c1,c2) PARTITIONS 4", false, ""},
+		{"CREATE TABLE t  (c1 integer ,c2 integer) PARTITION BY LINEAR KEY ALGORITHM = 0 (c1,c2) PARTITIONS 4", false, ""},
+		{"CREATE TABLE t  (c1 integer ,c2 integer) PARTITION BY LINEAR KEY ALGORITHM = 3 (c1,c2) PARTITIONS 4", false, ""},
+	}
+
+	RunTest(t, table, false)
+}
+
+// server side help syntax
+func TestHelp(t *testing.T) {
+	table := []testCase{
+		{"HELP 'select'", true, "HELP 'select'"},
+	}
+
+	RunTest(t, table, false)
+}
+
+func TestRestoreBinOpWithBrackets(t *testing.T) {
+	cases := []testCase{
+		{"select mod(a+b, 4)+1", true, "SELECT (((`a` + `b`) % 4) + 1)"},
+		{"select mod( year(a) - abs(weekday(a) + dayofweek(a)), 4) + 1", true, "SELECT (((year(`a`) - abs((weekday(`a`) + dayofweek(`a`)))) % 4) + 1)"},
+	}
+
+	p := parser.New()
+	p.EnableWindowFunc(false)
+	for _, tbl := range cases {
+		_, _, err := p.Parse(tbl.src, "", "")
+		comment := fmt.Sprintf("source %v", tbl.src)
+		if !tbl.ok {
+			require.Error(t, err, comment)
+			continue
+		}
+		require.NoError(t, err, comment)
+		// restore correctness test
+		if tbl.ok {
+			var sb strings.Builder
+			comment := fmt.Sprintf("source %v", tbl.src)
+			stmts, _, err := p.Parse(tbl.src, "", "")
+			require.NoError(t, err, comment)
+			restoreSQLs := ""
+			for _, stmt := range stmts {
+				sb.Reset()
+				ctx := NewRestoreCtx(RestoreStringSingleQuotes|RestoreSpacesAroundBinaryOperation|RestoreBracketAroundBinaryOperation|RestoreStringWithoutCharset|RestoreNameBackQuotes, &sb)
+				ctx.DefaultDB = "test"
+				err = stmt.Restore(ctx)
+				require.NoError(t, err, comment)
+				restoreSQL := sb.String()
+				comment = fmt.Sprintf("source %v; restore %v", tbl.src, restoreSQL)
+				if restoreSQLs != "" {
+					restoreSQLs += "; "
+				}
+				restoreSQLs += restoreSQL
+			}
+			comment = fmt.Sprintf("restore %v; expect %v", restoreSQLs, tbl.restore)
+			require.Equal(t, tbl.restore, restoreSQLs, comment)
+		}
+	}
+}
+
+// For CTE bindings.
+func TestCTEBindings(t *testing.T) {
+	table := []testCase{
+		{"WITH `cte` AS (SELECT * from t) SELECT `col1`,`col2` FROM `cte`", true, "WITH `cte` AS (SELECT * FROM `test`.`t`) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH `cte` (col1, col2) AS (SELECT * from t UNION ALL SELECT 3,4) SELECT col1, col2 FROM cte;", true, "WITH `cte` (`col1`, `col2`) AS (SELECT * FROM `test`.`t` UNION ALL SELECT 3,4) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH `cte` AS (SELECT * from t), cte2 as (select * from cte) SELECT `col1`,`col2` FROM `cte`", true, "WITH `cte` AS (SELECT * FROM `test`.`t`), `cte2` AS (SELECT * FROM `cte`) SELECT `col1`,`col2` FROM `cte`"},
+		{"WITH RECURSIVE cte (n) AS (  SELECT * from t  UNION ALL  SELECT n + 1 FROM cte WHERE n < 5)SELECT * FROM cte;", true, "WITH RECURSIVE `cte` (`n`) AS (SELECT * FROM `test`.`t` UNION ALL SELECT `n` + 1 FROM `cte` WHERE `n` < 5) SELECT * FROM `cte`"},
+		{"with cte(a) as (select * from t) update t, cte set t.a=1  where t.a=cte.a;", true, "WITH `cte` (`a`) AS (SELECT * FROM `test`.`t`) UPDATE (`test`.`t`) JOIN `cte` SET `t`.`a`=1 WHERE `t`.`a` = `cte`.`a`"},
+		{"with cte(a) as (select * from t) delete t from t, cte where t.a=cte.a;", true, "WITH `cte` (`a`) AS (SELECT * FROM `test`.`t`) DELETE `test`.`t` FROM (`test`.`t`) JOIN `cte` WHERE `t`.`a` = `cte`.`a`"},
+		{"WITH cte1 AS (SELECT * from t) SELECT * FROM (WITH cte2 AS (SELECT * from cte1) SELECT * FROM cte2 JOIN cte1) AS dt;", true, "WITH `cte1` AS (SELECT * FROM `test`.`t`) SELECT * FROM (WITH `cte2` AS (SELECT * FROM `cte1`) SELECT * FROM `cte2` JOIN `cte1`) AS `dt`"},
+		{"WITH cte AS (SELECT * from t) SELECT /*+ MAX_EXECUTION_TIME(1000) */ * FROM cte;", true, "WITH `cte` AS (SELECT * FROM `test`.`t`) SELECT /*+ MAX_EXECUTION_TIME(1000)*/ * FROM `cte`"},
+		{"with cte as (table t) table cte;", true, "WITH `cte` AS (TABLE `test`.`t`) TABLE `cte`"},
+		{"with cte as (select * from t) select 1 union with cte as (select * from t) select * from cte;", false, ""},
+		{"with cte as (select * from t) (select * from t);", true, "WITH `cte` AS (SELECT * FROM `test`.`t`) (SELECT * FROM `test`.`t`)"},
+		{"with cte as (select 1) (select 1 union select * from t)", true, "WITH `cte` AS (SELECT 1) (SELECT 1 UNION SELECT * FROM `test`.`t`)"},
+		{"select * from (with cte as (select * from t) select 1 union select * from t) qn", true, "SELECT * FROM (WITH `cte` AS (SELECT * FROM `test`.`t`) SELECT 1 UNION SELECT * FROM `test`.`t`) AS `qn`"},
+		{"select * from t where 1 > (with cte as (select * from t) select * from cte)", true, "SELECT * FROM `test`.`t` WHERE 1 > (WITH `cte` AS (SELECT * FROM `test`.`t`) SELECT * FROM `cte`)"},
+		{"( with cte(n) as ( select * from t )  select n+1 from cte  union select n+2 from cte) union select 1", true, "(WITH `cte` (`n`) AS (SELECT * FROM `test`.`t`) SELECT `n` + 1 FROM `cte` UNION SELECT `n` + 2 FROM `cte`) UNION SELECT 1"},
+		{"( with cte(n) as ( select * from t )  select n+1 from cte) union select * from t", true, "(WITH `cte` (`n`) AS (SELECT * FROM `test`.`t`) SELECT `n` + 1 FROM `cte`) UNION SELECT * FROM `test`.`t`"},
+		{"with cte as (select * from t union select * from cte) select * from cte", true, "WITH `cte` AS (SELECT * FROM `test`.`t` UNION SELECT * FROM `test`.`cte`) SELECT * FROM `cte`"},
+	}
+
+	p := parser.New()
+	p.EnableWindowFunc(false)
+	for _, tbl := range table {
+		_, _, err := p.Parse(tbl.src, "", "")
+		comment := fmt.Sprintf("source %v", tbl.src)
+		if !tbl.ok {
+			require.Error(t, err, comment)
+			continue
+		}
+		require.NoError(t, err, comment)
+		// restore correctness test
+		if tbl.ok {
+			var sb strings.Builder
+			comment := fmt.Sprintf("source %v", tbl.src)
+			stmts, _, err := p.Parse(tbl.src, "", "")
+			require.NoError(t, err, comment)
+			restoreSQLs := ""
+			for _, stmt := range stmts {
+				sb.Reset()
+				ctx := NewRestoreCtx(RestoreStringSingleQuotes|RestoreSpacesAroundBinaryOperation|RestoreStringWithoutCharset|RestoreNameBackQuotes, &sb)
+				ctx.DefaultDB = "test"
+				err = stmt.Restore(ctx)
+				require.NoError(t, err, comment)
+				restoreSQL := sb.String()
+				comment = fmt.Sprintf("source %v; restore %v", tbl.src, restoreSQL)
+				if restoreSQLs != "" {
+					restoreSQLs += "; "
+				}
+				restoreSQLs += restoreSQL
+			}
+			comment = fmt.Sprintf("restore %v; expect %v", restoreSQLs, tbl.restore)
+			require.Equal(t, tbl.restore, restoreSQLs, comment)
+		}
+	}
+}
+
+func TestPlanReplayer(t *testing.T) {
+	table := []testCase{
+		{"PLAN REPLAYER DUMP EXPLAIN SELECT a FROM t", true, "PLAN REPLAYER DUMP EXPLAIN SELECT `a` FROM `t`"},
+		{"PLAN REPLAYER DUMP EXPLAIN SELECT * FROM t WHERE a > 10", true, "PLAN REPLAYER DUMP EXPLAIN SELECT * FROM `t` WHERE `a`>10"},
+		{"PLAN REPLAYER DUMP EXPLAIN ANALYZE SELECT * FROM t WHERE a > 10", true, "PLAN REPLAYER DUMP EXPLAIN ANALYZE SELECT * FROM `t` WHERE `a`>10"},
+		{"PLAN REPLAYER DUMP EXPLAIN SLOW QUERY WHERE a > 10 and t < 1 ORDER BY t LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN SLOW QUERY WHERE `a`>10 AND `t`<1 ORDER BY `t` LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY WHERE a > 10 and t < 1 ORDER BY t LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY WHERE `a`>10 AND `t`<1 ORDER BY `t` LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN SLOW QUERY WHERE a > 10 and t < 1 LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN SLOW QUERY WHERE `a`>10 AND `t`<1 LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY WHERE a > 10 and t < 1 LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY WHERE `a`>10 AND `t`<1 LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN SLOW QUERY LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN SLOW QUERY LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY LIMIT 10", true, "PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY LIMIT 10"},
+		{"PLAN REPLAYER DUMP EXPLAIN SLOW QUERY", true, "PLAN REPLAYER DUMP EXPLAIN SLOW QUERY"},
+		{"PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY", true, "PLAN REPLAYER DUMP EXPLAIN ANALYZE SLOW QUERY"},
+		{"PLAN REPLAYER LOAD '/tmp/sdfaalskdjf.zip'", true, "PLAN REPLAYER LOAD '/tmp/sdfaalskdjf.zip'"},
+	}
+	RunTest(t, table, false)
+
+	p := parser.New()
+	sms, _, err := p.Parse("PLAN REPLAYER DUMP EXPLAIN SELECT a FROM t", "", "")
+	require.NoError(t, err)
+	v, ok := sms[0].(*ast.PlanReplayerStmt)
+	require.True(t, ok)
+	require.Equal(t, "SELECT a FROM t", v.Stmt.Text())
+	require.False(t, v.Analyze)
+
+	sms, _, err = p.Parse("PLAN REPLAYER DUMP EXPLAIN ANALYZE SELECT a FROM t", "", "")
+	require.NoError(t, err)
+	v, ok = sms[0].(*ast.PlanReplayerStmt)
+	require.True(t, ok)
+	require.Equal(t, "SELECT a FROM t", v.Stmt.Text())
+	require.True(t, v.Analyze)
+}
+
+func TestGBKEncoding(t *testing.T) {
+	p := parser.New()
+	gbkEncoding, _ := charset.Lookup("gbk")
+	encoder := gbkEncoding.NewEncoder()
+	sql, err := encoder.String("create table 测试表 (测试列 varchar(255) default 'GBK测试用例');")
+	require.NoError(t, err)
+
+	stmt, _, err := p.ParseSQL(sql)
+	require.NoError(t, err)
+	checker := &gbkEncodingChecker{}
+	_, _ = stmt[0].Accept(checker)
+	require.NotEqual(t, "测试表", checker.tblName)
+	require.NotEqual(t, "测试列", checker.colName)
+
+	gbkOpt := parser.CharsetClient("gbk")
+	stmt, _, err = p.ParseSQL(sql, gbkOpt)
+	require.NoError(t, err)
+	_, _ = stmt[0].Accept(checker)
+	require.Equal(t, "测试表", checker.tblName)
+	require.Equal(t, "测试列", checker.colName)
+	require.Equal(t, "GBK测试用例", checker.expr)
+
+	_, _, err = p.ParseSQL("select _gbk '\xc6\x5c' from dual;")
+	require.Error(t, err)
+
+	for _, test := range []struct {
+		sql string
+		err bool
+	}{
+		{"select '\xc6\x5c' from `\xab\x60`;", false},
+		{`prepare p1 from "insert into t values ('中文');";`, false},
+		{"select '啊';", false},
+		{"create table t1(s set('a一','b二','c三'));", false},
+		{"insert into t3 values('一a');", false},
+		{"select '\xa5\x5c'", false},
+		{"select '''\xa5\x5c'", false},
+		{"select ```\xa5\x5c`", false},
+		{"select '\x65\x5c'", true},
+	} {
+		_, _, err = p.ParseSQL(test.sql, gbkOpt)
+		if test.err {
+			require.Error(t, err, test.sql)
+		} else {
+			require.NoError(t, err, test.sql)
+		}
+	}
+}
+
+type gbkEncodingChecker struct {
+	tblName string
+	colName string
+	expr    string
+}
+
+func (g *gbkEncodingChecker) Enter(n ast.Node) (node ast.Node, skipChildren bool) {
+	if tn, ok := n.(*ast.TableName); ok {
+		g.tblName = tn.Name.O
+		return n, false
+	}
+	if cn, ok := n.(*ast.ColumnName); ok {
+		g.colName = cn.Name.O
+		return n, false
+	}
+	if c, ok := n.(*ast.ColumnOption); ok {
+		if ve, ok := c.Expr.(ast.ValueExpr); ok {
+			g.expr = ve.GetString()
+			return n, false
+		}
+	}
+	return n, false
+}
+
+func (g *gbkEncodingChecker) Leave(n ast.Node) (node ast.Node, ok bool) {
+	return n, true
+}
+
+func TestInsertStatementMemoryAllocation(t *testing.T) {
+	sql := "insert t values (1)" + strings.Repeat(",(1)", 1000)
+	var oldStats, newStats runtime.MemStats
+	runtime.ReadMemStats(&oldStats)
+	_, err := parser.New().ParseOneStmt(sql, "", "")
+	require.NoError(t, err)
+	runtime.ReadMemStats(&newStats)
+	require.Less(t, int(newStats.TotalAlloc-oldStats.TotalAlloc), 1024*500)
+}
+
+func TestCharsetIntroducer(t *testing.T) {
+	p := parser.New()
+	defer charset.RemoveCharset("gbk")
+	// `_gbk` is treated as a character set.
+	_, _, err := p.Parse("select _gbk 'a';", "", "")
+	require.EqualError(t, err, "[ddl:1115]Unsupported character introducer: 'gbk'")
+	_, _, err = p.Parse("select _gbk 0x1234;", "", "")
+	require.EqualError(t, err, "[ddl:1115]Unsupported character introducer: 'gbk'")
+	_, _, err = p.Parse("select _gbk 0b101001;", "", "")
+	require.EqualError(t, err, "[ddl:1115]Unsupported character introducer: 'gbk'")
 }

@@ -1,41 +1,20 @@
-// Licensed to Apache Software Foundation (ASF) under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Apache Software Foundation (ASF) licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-//
 package ast_test
 
 import (
 	"bytes"
 	"fmt"
+	"testing"
 
 	"github.com/arana-db/parser"
 	"github.com/arana-db/parser/ast"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = Suite(&testAstFormatSuite{})
-
-type testAstFormatSuite struct {
-}
 
 func getDefaultCharsetAndCollate() (string, string) {
 	return "utf8", "utf8_bin"
 }
 
-func (ts *testAstFormatSuite) TestAstFormat(c *C) {
+func TestAstFormat(t *testing.T) {
 	var testcases = []struct {
 		input  string
 		output string
@@ -97,8 +76,8 @@ func (ts *testAstFormatSuite) TestAstFormat(c *C) {
 		// see: https://dev.mysql.com/doc/refman/5.7/en/function-resolution.html
 		{` cast( a as signed ) `, "CAST(`a` AS SIGNED)"},
 		{` cast( a as unsigned integer) `, "CAST(`a` AS UNSIGNED)"},
-		{` cast( a as char(3) binary) `, "CAST(`a` AS CHAR(3) BINARY)"},
-		{` cast( a as decimal ) `, "CAST(`a` AS DECIMAL(11))"},
+		{` cast( a as char(3) binary) `, "CAST(`a` AS BINARY(3))"},
+		{` cast( a as decimal ) `, "CAST(`a` AS DECIMAL(10))"},
 		{` cast( a as decimal (3) ) `, "CAST(`a` AS DECIMAL(3))"},
 		{` cast( a as decimal (3,3) ) `, "CAST(`a` AS DECIMAL(3, 3))"},
 		{` ((case when (c0 = 0) then 0 when (c0 > 0) then (c1 / c0) end)) `, "((CASE WHEN (`c0` = 0) THEN 0 WHEN (`c0` > 0) THEN (`c1` / `c0`) END))"},
@@ -110,10 +89,10 @@ func (ts *testAstFormatSuite) TestAstFormat(c *C) {
 		charset, collation := getDefaultCharsetAndCollate()
 		stmts, _, err := parser.New().Parse(expr, charset, collation)
 		node := stmts[0].(*ast.SelectStmt).Fields.Fields[0].Expr
-		c.Assert(err, IsNil)
+		require.NoError(t, err)
 
 		writer := bytes.NewBufferString("")
 		node.Format(writer)
-		c.Assert(writer.String(), Equals, tt.output)
+		require.Equal(t, tt.output, writer.String())
 	}
 }

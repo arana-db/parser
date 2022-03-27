@@ -12,9 +12,17 @@
 *.out
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
-.idea/
+vendor/
 
 .tmp/
 /docker/data/
 /docker/mysqld/
+
+# misc
+
+bin/
+y.go
+*.output
+.idea/
+.vscode/
+coverage.txt

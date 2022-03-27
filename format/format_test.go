@@ -1,20 +1,3 @@
-// Licensed to Apache Software Foundation (ASF) under one or more contributor
-// license agreements. See the NOTICE file distributed with
-// this work for additional information regarding copyright
-// ownership. Apache Software Foundation (ASF) licenses this file to you under
-// the Apache License, Version 2.0 (the "License"); you may
-// not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-//
 // Copyright 2015 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,29 +19,19 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
 )
 
-func TestT(t *testing.T) {
-	CustomVerboseFlag = true
-	TestingT(t)
-}
-
-var _ = Suite(&testFormatSuite{})
-var _ = Suite(&testRestoreCtxSuite{})
-
-type testFormatSuite struct {
-}
-
-func checkFormat(c *C, f Formatter, buf *bytes.Buffer, str, expect string) {
+func checkFormat(t *testing.T, f Formatter, buf *bytes.Buffer, str, expect string) {
 	_, err := f.Format(str, 3)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	b, err := ioutil.ReadAll(buf)
-	c.Assert(err, IsNil)
-	c.Assert(string(b), Equals, expect)
+	require.NoError(t, err)
+	require.Equal(t, expect, string(b))
 }
 
-func (s *testFormatSuite) TestFormat(c *C) {
+func TestFormat(t *testing.T) {
 	str := "abc%d%%e%i\nx\ny\n%uz\n"
 	buf := &bytes.Buffer{}
 	f := IndentFormatter(buf, "\t")
@@ -67,19 +40,16 @@ func (s *testFormatSuite) TestFormat(c *C) {
 	y
 z
 `
-	checkFormat(c, f, buf, str, expect)
+	checkFormat(t, f, buf, str, expect)
 
 	str = "abc%d%%e%i\nx\ny\n%uz\n%i\n"
 	buf = &bytes.Buffer{}
 	f = FlatFormatter(buf)
 	expect = "abc3%e x y z\n "
-	checkFormat(c, f, buf, str, expect)
+	checkFormat(t, f, buf, str, expect)
 }
 
-type testRestoreCtxSuite struct {
-}
-
-func (s *testRestoreCtxSuite) TestRestoreCtx(c *C) {
+func TestRestoreCtx(t *testing.T) {
 	testCases := []struct {
 		flag   RestoreFlags
 		expect string
@@ -109,6 +79,31 @@ func (s *testRestoreCtxSuite) TestRestoreCtx(c *C) {
 		ctx.WriteString("str`.'\"ing\\")
 		ctx.WritePlain(" ")
 		ctx.WriteName("na`.'\"Me\\")
-		c.Assert(sb.String(), Equals, testCase.expect, Commentf("case: %#v", testCase))
+		require.Equalf(t, testCase.expect, sb.String(), "case: %#v", testCase)
 	}
+}
+
+func TestRestoreSpecialComment(t *testing.T) {
+	var sb strings.Builder
+	sb.Reset()
+	ctx := NewRestoreCtx(RestoreTiDBSpecialComment, &sb)
+	require.NoError(t, ctx.WriteWithSpecialComments("fea_id", func() error {
+		ctx.WritePlain("content")
+		return nil
+	}))
+	require.Equal(t, "/*T![fea_id] content */", sb.String())
+
+	sb.Reset()
+	require.NoError(t, ctx.WriteWithSpecialComments("", func() error {
+		ctx.WritePlain("shard_row_id_bits")
+		return nil
+	}))
+	require.Equal(t, "/*T! shard_row_id_bits */", sb.String())
+
+	sb.Reset()
+	err := errors.New("xxxx")
+	got := ctx.WriteWithSpecialComments("", func() error {
+		return err
+	})
+	require.Same(t, err, got)
 }
