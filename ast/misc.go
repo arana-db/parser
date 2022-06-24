@@ -20,12 +20,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/charset"
 	"github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
 	"github.com/arana-db/parser/mysql"
+	"github.com/pingcap/errors"
 )
 
 var (

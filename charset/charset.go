@@ -17,10 +17,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/terror"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 

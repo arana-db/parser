@@ -865,6 +865,7 @@ import (
 	CreateStatisticsStmt       "CREATE STATISTICS statement"
 	DoStmt                     "Do statement"
 	DropDatabaseStmt           "DROP DATABASE statement"
+	DropTriggerStmt            "DROP TRIGGER statement"
 	DropImportStmt             "DROP IMPORT statement"
 	DropIndexStmt              "DROP INDEX statement"
 	DropStatisticsStmt         "DROP STATISTICS statement"
@@ -4414,6 +4415,15 @@ DropDatabaseStmt:
 	"DROP" DatabaseSym IfExists DBName
 	{
 		$$ = &ast.DropDatabaseStmt{IfExists: $3.(bool), Name: $4}
+	}
+
+TriggerSym:
+	"TRIGGER"
+
+DropTriggerStmt:
+	"DROP" TriggerSym IfExists TableName
+	{
+		$$ = &ast.DropTriggerStmt{IfExists: $3.(bool), Trigger: $4.(*ast.TableName)}
 	}
 
 /******************************************************************
@@ -10964,6 +10974,7 @@ Statement:
 |	CreateStatisticsStmt
 |	DoStmt
 |	DropDatabaseStmt
+|	DropTriggerStmt
 |	DropImportStmt
 |	DropIndexStmt
 |	DropTableStmt

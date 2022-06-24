@@ -1,3 +1,5 @@
+go 1.13
+
 module github.com/arana-db/parser
 
 require (
@@ -14,5 +16,3 @@ require (
 	modernc.org/parser v1.0.2
 	modernc.org/y v1.0.1
 )
-
-go 1.13

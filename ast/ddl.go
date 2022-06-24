@@ -15,6 +15,7 @@ package ast
 
 import (
 	"github.com/pingcap/errors"
+
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
@@ -35,6 +36,7 @@ var (
 	_ DDLNode = &CreateSequenceStmt{}
 	_ DDLNode = &CreatePlacementPolicyStmt{}
 	_ DDLNode = &DropDatabaseStmt{}
+	_ DDLNode = &DropTriggerStmt{}
 	_ DDLNode = &DropIndexStmt{}
 	_ DDLNode = &DropTableStmt{}
 	_ DDLNode = &DropSequenceStmt{}
@@ -219,6 +221,37 @@ func (n *AlterDatabaseStmt) isAllPlacementOptions() bool {
 		}
 	}
 	return true
+}
+
+// DropTriggerStmt is a statement to drop a trigger in the database.
+// See https://dev.mysql.com/doc/refman/5.7/en/drop-trigger.html
+type DropTriggerStmt struct {
+	ddlNode
+
+	IfExists bool
+	Trigger  *TableName
+}
+
+// Restore implements Node interface.
+func (n *DropTriggerStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("DROP TRIGGER ")
+	if n.IfExists {
+		ctx.WriteKeyWord("IF EXISTS ")
+	}
+	if err := n.Trigger.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while splicing DropTriggerStmt")
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *DropTriggerStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*DropTriggerStmt)
+	return v.Leave(n)
 }
 
 // DropDatabaseStmt is a statement to drop a database and all tables in the database.
