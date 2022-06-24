@@ -20,11 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/charset"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/types"
+	"github.com/pingcap/errors"
 )
 
 // SchemaState is the state for schema elements.

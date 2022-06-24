@@ -14,9 +14,9 @@
 package ast
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
+	"github.com/pingcap/errors"
 )
 
 var (

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+
 	"github.com/arana-db/parser/format"
 )
 

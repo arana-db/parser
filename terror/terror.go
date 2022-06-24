@@ -20,9 +20,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/arana-db/parser/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/arana-db/parser/mysql"
 	"go.uber.org/zap"
 )
 

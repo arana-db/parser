@@ -19,8 +19,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/terror"
+	"github.com/pingcap/errors"
 )
 
 // CheckScrambledPassword check scrambled password received from client.

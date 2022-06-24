@@ -20,13 +20,13 @@ import (
 	"strconv"
 	"unicode"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/ast"
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/charset"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/terror"
 	"github.com/arana-db/parser/types"
+	"github.com/pingcap/errors"
 )
 
 var (

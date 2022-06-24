@@ -23,9 +23,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/arana-db/parser/format"
 	"github.com/cznic/strutil"
 	"github.com/pingcap/errors"
-	"github.com/arana-db/parser/format"
 	parser "modernc.org/parser/yacc"
 )
 

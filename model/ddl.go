@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/terror"
+	"github.com/pingcap/errors"
 )
 
 // ActionType is the type for DDL action.

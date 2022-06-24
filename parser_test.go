@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+
 	"github.com/arana-db/parser"
 	"github.com/arana-db/parser/ast"
 	"github.com/arana-db/parser/charset"
@@ -30,7 +32,6 @@ import (
 	"github.com/arana-db/parser/opcode"
 	"github.com/arana-db/parser/terror"
 	"github.com/arana-db/parser/test_driver"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSimple(t *testing.T) {
@@ -2593,6 +2594,9 @@ func TestDDL(t *testing.T) {
 		{"drop database xxx", true, "DROP DATABASE `xxx`"},
 		{"drop database if exists xxx", true, "DROP DATABASE IF EXISTS `xxx`"},
 		{"drop database if not exists xxx", false, ""},
+		{"drop trigger xxx", true, "DROP TRIGGER `xxx`"},
+		{"drop trigger if exists xxx", true, "DROP TRIGGER IF EXISTS `xxx`"},
+		{"drop trigger if exists xxx.yyy", true, "DROP TRIGGER IF EXISTS `xxx`.`yyy`"},
 		{"drop schema xxx", true, "DROP DATABASE `xxx`"},
 		{"drop schema if exists xxx", true, "DROP DATABASE IF EXISTS `xxx`"},
 		{"drop schema if not exists xxx", false, ""},

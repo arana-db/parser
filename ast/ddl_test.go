@@ -36,6 +36,7 @@ func TestDDLVisitorCover(t *testing.T) {
 		{&CreateDatabaseStmt{}, 0, 0},
 		{&AlterDatabaseStmt{}, 0, 0},
 		{&DropDatabaseStmt{}, 0, 0},
+		{&DropTriggerStmt{}, 0, 0},
 		{&DropIndexStmt{Table: &TableName{}}, 0, 0},
 		{&DropTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
 		{&RenameTableStmt{TableToTables: []*TableToTable{}}, 0, 0},

@@ -35,8 +35,9 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/arana-db/parser/ast"
 	requires "github.com/stretchr/testify/require"
+
+	"github.com/arana-db/parser/ast"
 )
 
 func TestCompareReservedWordsWithMySQL(t *testing.T) {

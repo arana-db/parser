@@ -24,10 +24,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/arana-db/parser/charset"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/types"
+	"github.com/pingcap/errors"
 )
 
 // Kind constants.
