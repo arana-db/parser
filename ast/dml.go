@@ -16,11 +16,12 @@ package ast
 import (
 	"strings"
 
+	"github.com/pingcap/errors"
+
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/format"
 	"github.com/arana-db/parser/model"
 	"github.com/arana-db/parser/mysql"
-	"github.com/pingcap/errors"
 )
 
 var (
@@ -2605,6 +2606,7 @@ const (
 	ShowPlacementForTable
 	ShowPlacementForPartition
 	ShowPlacementLabels
+	ShowTopology
 )
 
 const (
@@ -2688,6 +2690,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 	switch n.Tp {
 	case ShowCreateTable:
 		ctx.WriteKeyWord("CREATE TABLE ")
+		if err := n.Table.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
+		}
+	case ShowTopology:
+		ctx.WriteKeyWord("TOPOLOGY FROM ")
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
 		}
