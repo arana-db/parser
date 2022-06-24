@@ -545,6 +545,7 @@ import (
 	sendCredentialsToTiKV "SEND_CREDENTIALS_TO_TIKV"
 	separator             "SEPARATOR"
 	sequence              "SEQUENCE"
+	topology              "TOPOLOGY"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -6036,6 +6037,7 @@ UnReservedKeyword:
 |	"CYCLE"
 |	"NOCYCLE"
 |	"SEQUENCE"
+|	"TOPOLOGY"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -10260,6 +10262,13 @@ ShowStmt:
 			}
 		}
 		$$ = stmt
+	}
+|	"SHOW" "TOPOLOGY" "FROM" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:    ast.ShowTopology,
+			Table: $4.(*ast.TableName),
+		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName
 	{
