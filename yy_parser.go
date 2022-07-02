@@ -20,13 +20,14 @@ import (
 	"strconv"
 	"unicode"
 
+	"github.com/pingcap/errors"
+
 	"github.com/arana-db/parser/ast"
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/charset"
 	"github.com/arana-db/parser/mysql"
 	"github.com/arana-db/parser/terror"
 	"github.com/arana-db/parser/types"
-	"github.com/pingcap/errors"
 )
 
 var (
@@ -175,6 +176,19 @@ func (parser *Parser) Parse(sql, charset, collation string) (stmt []ast.StmtNode
 
 func (parser *Parser) lastErrorAsWarn() {
 	parser.lexer.lastErrorAsWarn()
+}
+
+// ParseOneStmtHints works like ParseOneStmt, but returns ARANA-specific hints.
+func (parser *Parser) ParseOneStmtHints(sql, charset, collation string) (ast.StmtNode, []string, error) {
+	stmts, _, err := parser.ParseSQL(sql, CharsetConnection(charset), CollationConnection(collation))
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	if len(stmts) != 1 {
+		return nil, nil, ErrSyntax
+	}
+	ast.SetFlag(stmts[0])
+	return stmts[0], parser.lexer.aranaHints, nil
 }
 
 // ParseOneStmt parses a query and returns an ast.StmtNode.

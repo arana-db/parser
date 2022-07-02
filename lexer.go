@@ -46,6 +46,8 @@ type Scanner struct {
 	warns        []error
 	stmtStartPos int
 
+	aranaHints []string
+
 	// inBangComment is true if we are inside a `/*! ... */` block.
 	// It is used to ignore a stray `*/` when scanning.
 	inBangComment bool
@@ -95,6 +97,7 @@ func (s *Scanner) reset(sql string) {
 	s.buf.Reset()
 	s.errs = s.errs[:0]
 	s.warns = s.warns[:0]
+	s.aranaHints = s.aranaHints[:0]
 	s.stmtStartPos = 0
 	s.inBangComment = false
 	s.lastKeyword = 0
@@ -454,6 +457,7 @@ func startWithSlash(s *Scanner) (tok int, pos Pos, lit string) {
 
 	isOptimizerHint := false
 	currentCharIsStar := false
+	isAranaHint := false
 
 	s.r.inc() // we see '/*' so far.
 	switch s.r.readByte() {
@@ -463,6 +467,13 @@ func startWithSlash(s *Scanner) (tok int, pos Pos, lit string) {
 		s.scanVersionDigits(5, 5)
 		s.inBangComment = true
 		return s.scan()
+
+	case 'A': // '/*A' maybe ARANA-specific comments
+		if s.r.peek() != '!' {
+			break
+		}
+		s.r.inc()
+		isAranaHint = true
 
 	case 'T': // '/*T' maybe TiDB-specific comments
 		if s.r.peek() != '!' {
@@ -505,18 +516,38 @@ func startWithSlash(s *Scanner) (tok int, pos Pos, lit string) {
 		break
 	}
 
+	var sb strings.Builder
+	fn := func(ch byte) bool {
+		if isAranaHint && (sb.Len() > 0 || !unicode.IsSpace(rune(ch))) {
+			sb.WriteByte(ch)
+		}
+		return ch != '*'
+	}
+
 	// standard C-like comment. read until we see '*/' then drop it.
 	for {
-		if currentCharIsStar || s.r.incAsLongAs(func(ch byte) bool { return ch != '*' }) == '*' {
+		if currentCharIsStar || s.r.incAsLongAs(fn) == '*' {
 			switch s.r.readByte() {
 			case '/':
 				// Meets */, means comment end.
 				if isOptimizerHint {
 					s.lastHintPos = pos
 					return hintComment, pos, s.r.data(&pos)
-				} else {
-					return s.scan()
 				}
+
+				if isAranaHint {
+					aHint := sb.String()
+					// rtrim space, skip suffix char '*'
+					for i := 1; i < len(aHint); i++ {
+						if !unicode.IsSpace(rune(aHint[len(aHint)-i-1])) {
+							s.aranaHints = append(s.aranaHints, aHint[:len(aHint)-i])
+							break
+						}
+					}
+				}
+
+				return s.scan()
+
 			case '*':
 				currentCharIsStar = true
 				continue
