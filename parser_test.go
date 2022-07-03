@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/arana-db/parser"
@@ -6635,4 +6636,12 @@ func TestCharsetIntroducer(t *testing.T) {
 	require.EqualError(t, err, "[ddl:1115]Unsupported character introducer: 'gbk'")
 	_, _, err = p.Parse("select _gbk 0b101001;", "", "")
 	require.EqualError(t, err, "[ddl:1115]Unsupported character introducer: 'gbk'")
+}
+
+func TestAranaHints(t *testing.T) {
+	p := parser.New()
+	sql := "/*A! foo */ /* this is not hint */ /*A! bar */ /*A!*/ /*A!  a b\t */ /*A!qux*/ select 1"
+	_, aHints, err := p.ParseOneStmtHints(sql, "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"foo", "bar", "a b", "qux"}, aHints)
 }
