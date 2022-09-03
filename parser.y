@@ -11109,6 +11109,18 @@ StatementList:
 			if lexer, ok := yylex.(stmtTexter); ok {
 				s.SetText(parser.lexer.client, lexer.stmtText())
 			}
+
+			// fill arana hints
+			if hints := parser.lexer.aranaHints; len(hints) > 0 {
+				type hintSetter interface {
+					SetHints(hints []string)
+				}
+				if hs, ok := s.(hintSetter); ok {
+					hs.SetHints(hints)
+				}
+				parser.lexer.aranaHints = nil
+			}
+
 			parser.result = append(parser.result, s)
 		}
 	}
@@ -11119,6 +11131,18 @@ StatementList:
 			if lexer, ok := yylex.(stmtTexter); ok {
 				s.SetText(parser.lexer.client, lexer.stmtText())
 			}
+
+			// fill arana hints
+			if hints := parser.lexer.aranaHints; len(hints) > 0 {
+				type hintSetter interface {
+					SetHints(hints []string)
+				}
+				if hs, ok := s.(hintSetter); ok {
+					hs.SetHints(hints)
+				}
+				parser.lexer.aranaHints = nil
+			}
+
 			parser.result = append(parser.result, s)
 		}
 	}

@@ -178,19 +178,6 @@ func (parser *Parser) lastErrorAsWarn() {
 	parser.lexer.lastErrorAsWarn()
 }
 
-// ParseOneStmtHints works like ParseOneStmt, but returns ARANA-specific hints.
-func (parser *Parser) ParseOneStmtHints(sql, charset, collation string) (ast.StmtNode, []string, error) {
-	stmts, _, err := parser.ParseSQL(sql, CharsetConnection(charset), CollationConnection(collation))
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	if len(stmts) != 1 {
-		return nil, nil, ErrSyntax
-	}
-	ast.SetFlag(stmts[0])
-	return stmts[0], parser.lexer.aranaHints, nil
-}
-
 // ParseOneStmt parses a query and returns an ast.StmtNode.
 // The query must have one statement, otherwise ErrSyntax is returned.
 func (parser *Parser) ParseOneStmt(sql, charset, collation string) (ast.StmtNode, error) {
@@ -202,6 +189,7 @@ func (parser *Parser) ParseOneStmt(sql, charset, collation string) (ast.StmtNode
 		return nil, ErrSyntax
 	}
 	ast.SetFlag(stmts[0])
+
 	return stmts[0], nil
 }
 

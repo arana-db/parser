@@ -6641,7 +6641,22 @@ func TestCharsetIntroducer(t *testing.T) {
 func TestAranaHints(t *testing.T) {
 	p := parser.New()
 	sql := "/*A! foo */ /* this is not hint */ /*A! bar */ /*A!*/ /*A!  a b\t */ /*A!qux*/ select 1"
-	_, aHints, err := p.ParseOneStmtHints(sql, "", "")
+	stmt, err := p.ParseOneStmt(sql, "", "")
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"foo", "bar", "a b", "qux"}, aHints)
+	assert.Equal(t, []string{"foo", "bar", "a b", "qux"}, stmt.Hints())
+}
+
+func TestAranaHintsMultipleStmt(t *testing.T) {
+	p := parser.New()
+	sql := `
+/*A! foo */ SELECT 1;
+/*A! bar */ /*A! qux */ SELECT 2;
+SELECT 3;
+`
+	stmts, _, err := p.Parse(sql, "", "")
+	assert.NoError(t, err)
+	assert.Len(t, stmts, 3)
+	assert.Equal(t, []string{"foo"}, stmts[0].Hints())
+	assert.Equal(t, []string{"bar", "qux"}, stmts[1].Hints())
+	assert.Len(t, stmts[2].Hints(), 0)
 }
