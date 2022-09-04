@@ -33,6 +33,10 @@ func isUserVarChar(ch byte) bool {
 	return isLetter(ch) || isDigit(ch) || ch == '_' || ch == '$' || ch == '.' || isIdentExtend(ch)
 }
 
+type hintSetter interface {
+	SetHints([]string)
+}
+
 type trieNode struct {
 	childs [256]*trieNode
 	token  int

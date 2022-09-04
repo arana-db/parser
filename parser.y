@@ -11112,9 +11112,6 @@ StatementList:
 
 			// fill arana hints
 			if hints := parser.lexer.aranaHints; len(hints) > 0 {
-				type hintSetter interface {
-					SetHints(hints []string)
-				}
 				if hs, ok := s.(hintSetter); ok {
 					hs.SetHints(hints)
 				}
@@ -11134,9 +11131,6 @@ StatementList:
 
 			// fill arana hints
 			if hints := parser.lexer.aranaHints; len(hints) > 0 {
-				type hintSetter interface {
-					SetHints(hints []string)
-				}
 				if hs, ok := s.(hintSetter); ok {
 					hs.SetHints(hints)
 				}
