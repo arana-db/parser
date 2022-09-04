@@ -73,6 +73,16 @@ func (n *node) OriginalText() string {
 // Statement implementations should embed it in.
 type stmtNode struct {
 	node
+	hints []string
+}
+
+func (sn *stmtNode) SetHints(hints []string) {
+	sn.hints = hints
+}
+
+// Hints implements StmtNode interface.
+func (sn *stmtNode) Hints() []string {
+	return sn.hints
 }
 
 // statement implements StmtNode interface.

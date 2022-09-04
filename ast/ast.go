@@ -100,6 +100,10 @@ type FuncNode interface {
 // Name of implementations should have 'Stmt' suffix.
 type StmtNode interface {
 	Node
+
+	// Hints returns the arana hints.
+	Hints() []string
+
 	statement()
 }
 

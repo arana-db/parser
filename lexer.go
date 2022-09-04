@@ -97,7 +97,7 @@ func (s *Scanner) reset(sql string) {
 	s.buf.Reset()
 	s.errs = s.errs[:0]
 	s.warns = s.warns[:0]
-	s.aranaHints = s.aranaHints[:0]
+	s.aranaHints = nil
 	s.stmtStartPos = 0
 	s.inBangComment = false
 	s.lastKeyword = 0
