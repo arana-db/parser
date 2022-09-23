@@ -6754,7 +6754,10 @@ SimpleExpr:
 |	Literal
 |	paramMarker
 	{
-		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
+		paramExpr := ast.NewParamMarkerExpr(yyS[yypt].offset)
+		paramExpr.SetOrder(parser.paramMarkerCursor)
+		parser.paramMarkerCursor++
+		$$ = paramExpr
 	}
 |	Variable
 |	SumExpr
@@ -8941,7 +8944,10 @@ LimitOption:
 	}
 |	paramMarker
 	{
-		$$ = ast.NewParamMarkerExpr(yyS[yypt].offset)
+		paramExpr := ast.NewParamMarkerExpr(yyS[yypt].offset)
+		paramExpr.SetOrder(parser.paramMarkerCursor)
+		parser.paramMarkerCursor++
+		$$ = paramExpr
 	}
 
 RowOrRows:

@@ -88,6 +88,7 @@ type Parser struct {
 
 	explicitCharset       bool
 	strictDoubleFieldType bool
+	paramMarkerCursor     int
 
 	// the following fields are used by yyParse to reduce allocation.
 	cache  []yySymType
@@ -125,6 +126,10 @@ func New() *Parser {
 	mode, _ := mysql.GetSQLMode(mysql.DefaultSQLMode)
 	p.SetSQLMode(mode)
 	return p
+}
+
+func (parser *Parser) ParamMarkerCursor() int {
+	return parser.paramMarkerCursor
 }
 
 func (parser *Parser) SetStrictDoubleTypeCheck(val bool) {
@@ -397,6 +402,7 @@ var (
 func resetParams(p *Parser) {
 	p.charset = mysql.DefaultCharset
 	p.collation = mysql.DefaultCollationName
+	p.paramMarkerCursor = 0
 }
 
 // ParseParam represents the parameter of parsing.
