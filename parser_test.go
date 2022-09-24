@@ -6660,3 +6660,19 @@ SELECT 3;
 	assert.Equal(t, []string{"bar", "qux"}, stmts[1].Hints())
 	assert.Len(t, stmts[2].Hints(), 0)
 }
+
+func TestFillParamMarker(t *testing.T) {
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("select * from t where k = ? limit ?,?", "", "")
+	assert.NoError(t, err)
+	sel := stmt.(*ast.SelectStmt)
+
+	where := sel.Where.(*ast.BinaryOperationExpr).R.(*test_driver.ParamMarkerExpr).Order
+	assert.Equal(t, 0, where)
+
+	offset := sel.Limit.Offset.(*test_driver.ParamMarkerExpr).Order
+	assert.Equal(t, 1, offset)
+
+	limit := sel.Limit.Count.(*test_driver.ParamMarkerExpr).Order
+	assert.Equal(t, 2, limit)
+}
