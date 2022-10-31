@@ -3520,6 +3520,8 @@ func TestDDL(t *testing.T) {
 		// for show topology
 		{"show topology from xxx", true, "SHOW TOPOLOGY FROM `xxx`"},
 		{"show topology from xxx.yyy", true, "SHOW TOPOLOGY FROM `xxx`.`yyy`"},
+		// for show replicas
+		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy
 		{"create placement policy x primary_region='us'", true, "CREATE PLACEMENT POLICY `x` PRIMARY_REGION = 'us'"},
 		{"create placement policy x region='us, 3'", false, ""},
