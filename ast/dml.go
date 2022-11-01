@@ -2607,6 +2607,7 @@ const (
 	ShowPlacementForPartition
 	ShowPlacementLabels
 	ShowTopology
+	ShowReplicas
 )
 
 const (
@@ -2860,6 +2861,8 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 			ctx.WriteKeyWord("CONFIG")
 		case ShowDatabases:
 			ctx.WriteKeyWord("DATABASES")
+		case ShowReplicas:
+			ctx.WriteKeyWord("REPLICAS")
 		case ShowCharset:
 			ctx.WriteKeyWord("CHARSET")
 		case ShowTables:

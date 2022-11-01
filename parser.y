@@ -918,7 +918,7 @@ import (
 	SetRoleStmt                "Set active role statement"
 	SetDefaultRoleStmt         "Set default statement for some user"
 	ShowImportStmt             "SHOW IMPORT statement"
-	ShowStmt                   "Show engines/databases/tables/user/columns/warnings/status statement"
+	ShowStmt                   "Show engines/databases/replicas/tables/user/columns/warnings/status statement"
 	Statement                  "statement"
 	StopImportStmt             "STOP IMPORT statement"
 	TraceStmt                  "TRACE statement"
@@ -10549,6 +10549,10 @@ ShowTargetFilterable:
 |	"DATABASES"
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowDatabases}
+	}
+	"REPLICAS"
+	{
+		$$ = &ast.ShowStmt{Tp: ast.ShowReplicas}
 	}
 |	"CONFIG"
 	{
