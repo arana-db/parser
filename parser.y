@@ -10550,7 +10550,7 @@ ShowTargetFilterable:
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowDatabases}
 	}
-	"REPLICAS"
+|	"REPLICAS"
 	{
 		$$ = &ast.ShowStmt{Tp: ast.ShowReplicas}
 	}
