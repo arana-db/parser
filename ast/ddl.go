@@ -44,6 +44,7 @@ var (
 	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
 	_ DDLNode = &RepairTableStmt{}
+	_ DDLNode = &OptimizeTableStmt{}
 
 	_ Node = &AlterTableSpec{}
 	_ Node = &ColumnDef{}
@@ -1900,6 +1901,47 @@ func (n *CleanupTableLockStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	}
 	return nil
+}
+
+// OptimizeTableStmt is a statement that reorganizes the physical storage of table data and associated index data.
+// See https://dev.mysql.com/doc/refman/8.0/en/optimize-table.html
+type OptimizeTableStmt struct {
+	ddlNode
+	NoWriteToBinlog bool
+	Tables          []*TableName
+}
+
+func (n *OptimizeTableStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("ADMIN OPTIMIZE ")
+	if n.NoWriteToBinlog {
+		ctx.WriteKeyWord("NO_WRITE_TO_BINLOG ")
+	}
+	ctx.WriteKeyWord("TABLE ")
+	for i, v := range n.Tables {
+		if i != 0 {
+			ctx.WritePlain(", ")
+		}
+		if err := v.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore OptimizeTableStmt.Tables[%d]", i)
+		}
+	}
+	return nil
+}
+
+func (n *OptimizeTableStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*OptimizeTableStmt)
+	for i := range n.Tables {
+		node, ok := n.Tables[i].Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Tables[i] = node.(*TableName)
+	}
+	return v.Leave(n)
 }
 
 // RepairTableStmt is a statement to repair tableInfo.
