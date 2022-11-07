@@ -10133,6 +10133,13 @@ AdminStmt:
 			Tables: $5.([]*ast.TableName),
 		}
 	}
+|	"ADMIN" "OPTIMIZE" NoWriteToBinLogAliasOpt "TABLE" TableNameList
+	{
+		$$ = &ast.OptimizeTableStmt{
+			NoWriteToBinlog: $3.(bool),
+			Tables:          $5.([]*ast.TableName),
+		}
+	}
 |	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
 	{
 		$$ = &ast.RepairTableStmt{
