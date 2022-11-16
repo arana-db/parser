@@ -10394,6 +10394,12 @@ ShowStmt:
 			Tp: ast.ShowMasterStatus,
 		}
 	}
+|	"SHOW" "REPLICA" "STATUS"
+	{
+		$$ = &ast.ShowStmt{
+			Tp: ast.ShowReplicaStatus,
+		}
+	}
 |	"SHOW" OptFull "PROCESSLIST"
 	{
 		$$ = &ast.ShowStmt{
