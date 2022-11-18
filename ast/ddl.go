@@ -1912,7 +1912,7 @@ type OptimizeTableStmt struct {
 }
 
 func (n *OptimizeTableStmt) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("ADMIN OPTIMIZE ")
+	ctx.WriteKeyWord("OPTIMIZE ")
 	if n.NoWriteToBinlog {
 		ctx.WriteKeyWord("NO_WRITE_TO_BINLOG ")
 	}
