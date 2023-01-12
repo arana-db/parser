@@ -45,6 +45,7 @@ var (
 	_ DDLNode = &TruncateTableStmt{}
 	_ DDLNode = &RepairTableStmt{}
 	_ DDLNode = &OptimizeTableStmt{}
+	_ DDLNode = &CheckTableStmt{}
 
 	_ Node = &AlterTableSpec{}
 	_ Node = &ColumnDef{}
@@ -1942,6 +1943,42 @@ func (n *OptimizeTableStmt) Accept(v Visitor) (Node, bool) {
 		n.Tables[i] = node.(*TableName)
 	}
 	return v.Leave(n)
+}
+
+// CheckTableStmt is a statement that checks a table or tables for errors
+// See https://dev.mysql.com/doc/refman/8.0/en/check-table.html
+type CheckTableStmt struct {
+	ddlNode
+	Tables []*TableName
+}
+
+func (c *CheckTableStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("CHECK TABLE ")
+	for i, v := range c.Tables {
+		if i != 0 {
+			ctx.WritePlain(", ")
+		}
+		if err := v.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore CheckTableStmt.Tables[%d]", i)
+		}
+	}
+	return nil
+}
+
+func (c *CheckTableStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(c)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	c = newNode.(*CheckTableStmt)
+	for i := range c.Tables {
+		node, ok := c.Tables[i].Accept(v)
+		if !ok {
+			return c, false
+		}
+		c.Tables[i] = node.(*TableName)
+	}
+	return v.Leave(c)
 }
 
 // RepairTableStmt is a statement to repair tableInfo.

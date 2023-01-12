@@ -40,6 +40,7 @@ func TestDDLVisitorCover(t *testing.T) {
 		{&DropIndexStmt{Table: &TableName{}}, 0, 0},
 		{&DropTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
 		{&OptimizeTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
+		{&CheckTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
 		{&RenameTableStmt{TableToTables: []*TableToTable{}}, 0, 0},
 		{&TruncateTableStmt{Table: &TableName{}}, 0, 0},
 
