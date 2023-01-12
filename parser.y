@@ -10140,6 +10140,12 @@ AdminStmt:
 			Tables:          $4.([]*ast.TableName),
 		}
 	}
+|	"CHECK" "TABLE" TableNameList
+	{
+		$$ = &ast.CheckTableStmt{
+			Tables:          $3.([]*ast.TableName),
+		}
+	}
 |	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
 	{
 		$$ = &ast.RepairTableStmt{
