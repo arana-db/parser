@@ -1950,6 +1950,7 @@ func (n *OptimizeTableStmt) Accept(v Visitor) (Node, bool) {
 type CheckTableStmt struct {
 	ddlNode
 	Tables []*TableName
+	Quick  bool
 }
 
 func (c *CheckTableStmt) Restore(ctx *format.RestoreCtx) error {
@@ -1961,6 +1962,9 @@ func (c *CheckTableStmt) Restore(ctx *format.RestoreCtx) error {
 		if err := v.Restore(ctx); err != nil {
 			return errors.Annotatef(err, "An error occurred while restore CheckTableStmt.Tables[%d]", i)
 		}
+	}
+	if c.Quick {
+		ctx.WritePlain(" QUICK")
 	}
 	return nil
 }

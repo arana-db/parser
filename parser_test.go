@@ -1004,7 +1004,9 @@ AAAAAAAAAAAA5gm5Mg==
 		// for check table mode.
 		{"CHECK TABLE", false, ""},
 		{"CHECK TABLE t", true, "CHECK TABLE `t`"},
+		{"CHECK TABLE t QUICK", true, "CHECK TABLE `t` QUICK"},
 		{"CHECK TABLE t1,t2", true, "CHECK TABLE `t1`, `t2`"},
+		{"CHECK TABLE t1,t2 QUICK", true, "CHECK TABLE `t1`, `t2` QUICK"},
 
 		// for alter instance.
 		{"ALTER INSTANCE RELOAD TLS", true, "ALTER INSTANCE RELOAD TLS"},
