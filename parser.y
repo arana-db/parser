@@ -10140,10 +10140,11 @@ AdminStmt:
 			Tables:          $4.([]*ast.TableName),
 		}
 	}
-|	"CHECK" "TABLE" TableNameList
+|	"CHECK" "TABLE" TableNameList QuickOptional
 	{
 		$$ = &ast.CheckTableStmt{
 			Tables:          $3.([]*ast.TableName),
+			Quick:			 $4.(bool),
 		}
 	}
 |	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
