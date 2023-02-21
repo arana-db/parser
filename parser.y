@@ -546,6 +546,7 @@ import (
 	separator             "SEPARATOR"
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
+	tableRules			  "TABLE_RULES"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -6038,6 +6039,7 @@ UnReservedKeyword:
 |	"NOCYCLE"
 |	"SEQUENCE"
 |	"TOPOLOGY"
+|	"TABLE_RULES"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -10290,6 +10292,13 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
+|	"SHOW" "TABLE"	"RULES"	"FROM" TableName
+	{
+		$$ = &ast.ShowStmt{
+     			Tp:    ast.ShowTableRules,
+     			Table: $5.(*ast.TableName),
+     	}
+     }
 |	"SHOW" "CREATE" "TABLE" TableName
 	{
 		$$ = &ast.ShowStmt{
