@@ -707,6 +707,7 @@ var tokenMap = map[string]int{
 	"TARGET":                   target,
 	"TABLE_CHECKSUM":           tableChecksum,
 	"TABLE":                    tableKwd,
+	"TABLERULES":               tableRules,
 	"TABLES":                   tables,
 	"TABLESAMPLE":              tableSample,
 	"TABLESPACE":               tablespace,
