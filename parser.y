@@ -247,6 +247,7 @@ import (
 	statsExtended     "STATS_EXTENDED"
 	straightJoin      "STRAIGHT_JOIN"
 	tableKwd          "TABLE"
+	tableRules        "TABLERULES"
 	tableSample       "TABLESAMPLE"
 	stored            "STORED"
 	terminated        "TERMINATED"
@@ -10292,13 +10293,14 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
-|	"SHOW" "TABLE"	"RULES"	"FROM" TableName
+|   "SHOW" "TABLERULES" "FROM" TableName
 	{
 		$$ = &ast.ShowStmt{
-     			Tp:    ast.ShowTableRules,
-     			Table: $5.(*ast.TableName),
-     	}
-     }
+			Tp:    ast.ShowTableRules,
+			Table: $4.(*ast.TableName),
+		}
+	}
+
 |	"SHOW" "CREATE" "TABLE" TableName
 	{
 		$$ = &ast.ShowStmt{

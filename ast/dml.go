@@ -2707,6 +2707,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
 		}
+	case ShowTableRules:
+		ctx.WriteKeyWord("TABLERULES FROM ")
+		if err := n.Table.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
+		}
 	case ShowCreateView:
 		ctx.WriteKeyWord("CREATE VIEW ")
 		if err := n.Table.Restore(ctx); err != nil {
@@ -2862,11 +2867,6 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 		ctx.WriteKeyWord(" PARTITION ")
 		ctx.WriteName(n.Partition.String())
-	case ShowTableRules:
-		ctx.WriteKeyWord("TABLE RULES FROM ")
-		if err := n.Table.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
-		}
 	// ShowTargetFilterable
 	default:
 		switch n.Tp {
