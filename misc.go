@@ -763,7 +763,7 @@ var tokenMap = map[string]int{
 	"USAGE":                    usage,
 	"USE":                      use,
 	"USER":                     user,
-	"USER":                     users,
+	"USERS":                    users,
 	"USING":                    using,
 	"UTC_DATE":                 utcDate,
 	"UTC_TIME":                 utcTime,
