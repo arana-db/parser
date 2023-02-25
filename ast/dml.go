@@ -2692,7 +2692,7 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 	ctx.WriteKeyWord("SHOW ")
 	switch n.Tp {
 	case ShowUsersFromTenant:
-		ctx.WriteKeyWord("SHOW USERS FROM TENANT")
+		ctx.WriteKeyWord("USERS FROM TENANT")
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.User")
 		}
