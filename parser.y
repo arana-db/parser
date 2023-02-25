@@ -536,6 +536,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
+	rules                 "RULES"
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -6055,6 +6056,7 @@ UnReservedKeyword:
 |	"RATE_LIMIT"
 |	"RESTORE"
 |	"RESTORES"
+|	"RULES"
 |	"SEND_CREDENTIALS_TO_TIKV"
 |	"LAST_BACKUP"
 |	"CHECKPOINT"
@@ -10288,6 +10290,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTopology,
 			Table: $4.(*ast.TableName),
+		}
+	}
+|   "SHOW" "TABLE" "RULES" "FROM" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:    ast.ShowTableRules,
+			Table: $5.(*ast.TableName),
 		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName

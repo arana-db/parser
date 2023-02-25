@@ -2609,6 +2609,7 @@ const (
 	ShowPlacementLabels
 	ShowTopology
 	ShowReplicas
+	ShowTableRules
 )
 
 const (
@@ -2697,6 +2698,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowTopology:
 		ctx.WriteKeyWord("TOPOLOGY FROM ")
+		if err := n.Table.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
+		}
+	case ShowTableRules:
+		ctx.WriteKeyWord("TABLE RULES FROM ")
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
 		}
