@@ -546,6 +546,7 @@ import (
 	separator             "SEPARATOR"
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
+	nodes                 "NODES"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -1395,6 +1396,7 @@ import (
 	StringName                      "string literal or identifier"
 	StringNameOrBRIEOptionKeyword   "string literal or identifier or keyword used for BRIE options"
 	Symbol                          "Constraint Symbol"
+	Tenant                          "Tenant Name"
 
 %precedence empty
 %precedence as
@@ -6038,6 +6040,7 @@ UnReservedKeyword:
 |	"NOCYCLE"
 |	"SEQUENCE"
 |	"TOPOLOGY"
+|	"NODES"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -10143,8 +10146,8 @@ AdminStmt:
 |	"CHECK" "TABLE" TableNameList QuickOptional
 	{
 		$$ = &ast.CheckTableStmt{
-			Tables:          $3.([]*ast.TableName),
-			Quick:			 $4.(bool),
+			Tables: $3.([]*ast.TableName),
+			Quick:  $4.(bool),
 		}
 	}
 |	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
@@ -10269,7 +10272,9 @@ NumList:
 		$$ = append($1.([]int64), $3.(int64))
 	}
 
-/****************************Show Statement*******************************/
+Tenant:
+	Identifier
+
 ShowStmt:
 	"SHOW" ShowTargetFilterable ShowLikeOrWhereOpt
 	{
@@ -10288,6 +10293,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTopology,
 			Table: $4.(*ast.TableName),
+		}
+	}
+|	"SHOW" "NODES" "FROM" Tenant
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowNodes,
+			Tenant: $4,
 		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName
