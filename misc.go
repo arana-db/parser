@@ -267,6 +267,7 @@ var tokenMap = map[string]int{
 	"DATA":                     data,
 	"DATABASE":                 database,
 	"DATABASES":                databases,
+	"DATABASE_RULES":           databaseRules,
 	"DATE_ADD":                 dateAdd,
 	"DATE_SUB":                 dateSub,
 	"DATE":                     dateType,

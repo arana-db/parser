@@ -2609,6 +2609,7 @@ const (
 	ShowPlacementLabels
 	ShowTopology
 	ShowReplicas
+	ShowDatabaseRules
 )
 
 const (
@@ -2705,6 +2706,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.VIEW")
 		}
+	case ShowDatabaseRules:
+		ctx.WriteKeyWord("DATABASERULES FROM ")
+		ctx.WriteName(n.DBName)
 	case ShowCreateDatabase:
 		ctx.WriteKeyWord("CREATE DATABASE ")
 		if n.IfNotExists {

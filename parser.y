@@ -105,6 +105,7 @@ import (
 	currentRole       "CURRENT_ROLE"
 	database          "DATABASE"
 	databases         "DATABASES"
+	databaseRules     "DATABASERULES"
 	dayHour           "DAY_HOUR"
 	dayMicrosecond    "DAY_MICROSECOND"
 	dayMinute         "DAY_MINUTE"
@@ -362,6 +363,7 @@ import (
 	clustered             "CLUSTERED"
 	cycle                 "CYCLE"
 	data                  "DATA"
+	databaseRules         "DATABASE_RULES"
 	datetimeType          "DATETIME"
 	dateType              "DATE"
 	day                   "DAY"
@@ -6086,6 +6088,7 @@ UnReservedKeyword:
 |	"LOCKED"
 |	"CLUSTERED"
 |	"NONCLUSTERED"
+|	"DATABASE_RULES"
 |	"PRESERVE"
 
 TiDBKeyword:
@@ -10310,6 +10313,13 @@ ShowStmt:
 			Tp:          ast.ShowCreateDatabase,
 			IfNotExists: $4.(bool),
 			DBName:      $5,
+		}
+	}
+|	"SHOW" "DATABASERULES" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowDatabaseRules,
+			DBName: $4,
 		}
 	}
 |	"SHOW" "CREATE" "SEQUENCE" TableName
