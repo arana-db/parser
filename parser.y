@@ -546,7 +546,7 @@ import (
 	separator             "SEPARATOR"
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
-	showUsersFromTenant   "SHOW_USERS_FROM_TENANT"
+	users                 "USERS"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -1396,6 +1396,7 @@ import (
 	StringName                      "string literal or identifier"
 	StringNameOrBRIEOptionKeyword   "string literal or identifier or keyword used for BRIE options"
 	Symbol                          "Constraint Symbol"
+	Tenant                          "Tenant Name"
 
 %precedence empty
 %precedence as
@@ -6039,6 +6040,7 @@ UnReservedKeyword:
 |	"NOCYCLE"
 |	"SEQUENCE"
 |	"TOPOLOGY"
+|	"USERS"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -10271,6 +10273,9 @@ NumList:
 	}
 
 /****************************Show Statement*******************************/
+Tenant:
+	Identifier
+
 ShowStmt:
 	"SHOW" ShowTargetFilterable ShowLikeOrWhereOpt
 	{
@@ -10289,6 +10294,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTopology,
 			Table: $4.(*ast.TableName),
+		}
+	}
+|	"SHOW" "USERS" "FROM" Tenant
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowUsers,
+			Tenant: $4,
 		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName
