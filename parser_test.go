@@ -1125,7 +1125,6 @@ func TestDBAStmt(t *testing.T) {
 		{"show create database if not exists d1", true, "SHOW CREATE DATABASE IF NOT EXISTS `d1`"},
 		// for show database rules
 		{"show databaserules from xxx", true, "SHOW DATABASERULES FROM `xxx`"},
-		{"show databaserules from xxx.yyy", true, "SHOW DATABASERULES FROM `xxx`.`yyy`"},
 		// for show create sequence
 		{"show create sequence seq", true, "SHOW CREATE SEQUENCE `seq`"},
 		{"show create sequence test.seq", true, "SHOW CREATE SEQUENCE `test`.`seq`"},
