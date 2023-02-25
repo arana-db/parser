@@ -2609,6 +2609,7 @@ const (
 	ShowPlacementLabels
 	ShowTopology
 	ShowReplicas
+	ShowUsersFromTenant
 )
 
 const (
