@@ -536,7 +536,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
-	rules				  "RULES"	
+	rules                 "RULES"	
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -10309,7 +10309,7 @@ ShowStmt:
 |   "SHOW" "DATABASE" "RULES" "FROM" DBName
 	{
 		$$ = &ast.ShowStmt{
-			Tp:    ast.ShowDatabaseRules,
+			Tp:     ast.ShowDatabaseRules,
 			DBName: $5,
 		}
 	}
