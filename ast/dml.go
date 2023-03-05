@@ -2609,6 +2609,7 @@ const (
 	ShowPlacementLabels
 	ShowTopology
 	ShowReplicas
+	ShowUsers
 )
 
 const (
@@ -2630,6 +2631,7 @@ type ShowStmt struct {
 	dmlNode
 
 	Tp          ShowStmtType // Databases/Tables/Columns/....
+	Tenant      string
 	DBName      string
 	Table       *TableName  // Used for showing columns.
 	Partition   model.CIStr // Used for showing partition.
@@ -2700,6 +2702,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
 		}
+	case ShowUsers:
+		ctx.WriteKeyWord("USERS FROM ")
+		ctx.WriteName(n.Tenant)
 	case ShowCreateView:
 		ctx.WriteKeyWord("CREATE VIEW ")
 		if err := n.Table.Restore(ctx); err != nil {

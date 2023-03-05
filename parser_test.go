@@ -3536,6 +3536,7 @@ func TestDDL(t *testing.T) {
 		// for show topology
 		{"show topology from xxx", true, "SHOW TOPOLOGY FROM `xxx`"},
 		{"show topology from xxx.yyy", true, "SHOW TOPOLOGY FROM `xxx`.`yyy`"},
+		{"show users from xxx", true, "SHOW USERS FROM `xxx`"},
 		// for show replicas
 		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy
