@@ -1123,6 +1123,8 @@ func TestDBAStmt(t *testing.T) {
 		// for show create database
 		{"show create database d1", true, "SHOW CREATE DATABASE `d1`"},
 		{"show create database if not exists d1", true, "SHOW CREATE DATABASE IF NOT EXISTS `d1`"},
+		// for show databse rules
+		{"show database rules from xxx", true, "SHOW DATABASE RULES FROM `xxx`"},
 		// for show create sequence
 		{"show create sequence seq", true, "SHOW CREATE SEQUENCE `seq`"},
 		{"show create sequence test.seq", true, "SHOW CREATE SEQUENCE `test`.`seq`"},
@@ -3539,6 +3541,7 @@ func TestDDL(t *testing.T) {
 		// for show table rules
 		{"show table rules from xxx", true, "SHOW TABLE RULES FROM `xxx`"},
 		{"show table rules from xxx.yyy", true, "SHOW TABLE RULES FROM `xxx`.`yyy`"},
+		{"show users from xxx", true, "SHOW USERS FROM `xxx`"},
 		// for show replicas
 		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy

@@ -537,7 +537,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
-	rules                 "RULES"
+	rules                 "RULES"	
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -548,6 +548,7 @@ import (
 	separator             "SEPARATOR"
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
+	users                 "USERS"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -1398,6 +1399,7 @@ import (
 	StringName                      "string literal or identifier"
 	StringNameOrBRIEOptionKeyword   "string literal or identifier or keyword used for BRIE options"
 	Symbol                          "Constraint Symbol"
+	Tenant                          "Tenant Name"
 
 %precedence empty
 %precedence as
@@ -6041,6 +6043,7 @@ UnReservedKeyword:
 |	"NOCYCLE"
 |	"SEQUENCE"
 |	"TOPOLOGY"
+|	"USERS"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -6058,7 +6061,7 @@ UnReservedKeyword:
 |	"RATE_LIMIT"
 |	"RESTORE"
 |	"RESTORES"
-|   "RULES"
+| 	"RULES"
 |	"SEND_CREDENTIALS_TO_TIKV"
 |	"LAST_BACKUP"
 |	"CHECKPOINT"
@@ -10148,8 +10151,8 @@ AdminStmt:
 |	"CHECK" "TABLE" TableNameList QuickOptional
 	{
 		$$ = &ast.CheckTableStmt{
-			Tables:          $3.([]*ast.TableName),
-			Quick:			 $4.(bool),
+			Tables: $3.([]*ast.TableName),
+			Quick:  $4.(bool),
 		}
 	}
 |	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
@@ -10275,6 +10278,9 @@ NumList:
 	}
 
 /****************************Show Statement*******************************/
+Tenant:
+	Identifier
+
 ShowStmt:
 	"SHOW" ShowTargetFilterable ShowLikeOrWhereOpt
 	{
@@ -10300,7 +10306,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTableRules,
 			Table: $5.(*ast.TableName),
-
+		}
+	}
+|	"SHOW" "USERS" "FROM" Tenant
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowUsers,
+			Tenant: $4,
 		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName
@@ -10315,6 +10327,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowCreateView,
 			Table: $4.(*ast.TableName),
+		}
+	}
+|   "SHOW" "DATABASE" "RULES" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowDatabaseRules,
+			DBName: $5,
 		}
 	}
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
