@@ -248,6 +248,7 @@ import (
 	straightJoin      "STRAIGHT_JOIN"
 	tableKwd          "TABLE"
 	tableSample       "TABLESAMPLE"
+	tableRules        "TABLERULES"
 	stored            "STORED"
 	terminated        "TERMINATED"
 	then              "THEN"
@@ -591,6 +592,7 @@ import (
 	system                "SYSTEM"
 	systemTime            "SYSTEM_TIME"
 	tableChecksum         "TABLE_CHECKSUM"
+	tableRules            "TABLE_RULES"
 	tables                "TABLES"
 	tablespace            "TABLESPACE"
 	temporary             "TEMPORARY"
@@ -6088,6 +6090,7 @@ UnReservedKeyword:
 |	"LOCKED"
 |	"CLUSTERED"
 |	"NONCLUSTERED"
+|   "TABLE_RULES"
 |	"PRESERVE"
 
 TiDBKeyword:
@@ -10297,6 +10300,7 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTableRules,
 			Table: $5.(*ast.TableName),
+
 		}
 	}
 |	"SHOW" "CREATE" "TABLE" TableName
