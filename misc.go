@@ -628,6 +628,8 @@ var tokenMap = map[string]int{
 	"SEPARATOR":                separator,
 	"SEQUENCE":                 sequence,
 	"TOPOLOGY":                 topology,
+	"TABLERULES":               tableRules,
+	"TABLE_RULES":              tableRules,
 	"SERIAL":                   serial,
 	"SERIALIZABLE":             serializable,
 	"SESSION":                  session,

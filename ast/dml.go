@@ -102,6 +102,11 @@ func (*Join) resultSet() {}
 //
 // (left)         (right)
 //
+//	               JOIN ON t2.a = t3.a
+//	t1    join    /    \
+//	            t2      t3
+//
+// (left)         (right)
 // We can not build it directly to:
 //
 //	  JOIN
@@ -2615,6 +2620,7 @@ const (
 	ShowPlacementLabels
 	ShowTopology
 	ShowReplicas
+	ShowTableRules
 	ShowUsers
 	ShowDatabaseRules
 )
@@ -2706,6 +2712,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowTopology:
 		ctx.WriteKeyWord("TOPOLOGY FROM ")
+		if err := n.Table.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
+		}
+	case ShowTableRules:
+		ctx.WriteKeyWord("TABLE RULES FROM ")
 		if err := n.Table.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Table")
 		}
