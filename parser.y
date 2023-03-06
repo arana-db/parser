@@ -536,6 +536,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
+	rules                 "RULES"	
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -6058,6 +6059,7 @@ UnReservedKeyword:
 |	"RATE_LIMIT"
 |	"RESTORE"
 |	"RESTORES"
+| 	"RULES"
 |	"SEND_CREDENTIALS_TO_TIKV"
 |	"LAST_BACKUP"
 |	"CHECKPOINT"
@@ -10315,6 +10317,13 @@ ShowStmt:
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowCreateView,
 			Table: $4.(*ast.TableName),
+		}
+	}
+|   "SHOW" "DATABASE" "RULES" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowDatabaseRules,
+			DBName: $5,
 		}
 	}
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
