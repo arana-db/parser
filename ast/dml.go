@@ -2619,6 +2619,7 @@ const (
 	ShowPlacementForPartition
 	ShowPlacementLabels
 	ShowTopology
+	ShowNodes
 	ShowReplicas
 	ShowTableRules
 	ShowUsers
@@ -2722,6 +2723,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowUsers:
 		ctx.WriteKeyWord("USERS FROM ")
+		ctx.WriteName(n.Tenant)
+	case ShowNodes:
+		ctx.WriteKeyWord("NODES FROM ")
 		ctx.WriteName(n.Tenant)
 	case ShowCreateView:
 		ctx.WriteKeyWord("CREATE VIEW ")

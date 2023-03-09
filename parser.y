@@ -537,7 +537,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
-	rules                 "RULES"	
+	rules                 "RULES"
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -549,6 +549,7 @@ import (
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
 	users                 "USERS"
+	nodes                 "NODES"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
@@ -6044,6 +6045,7 @@ UnReservedKeyword:
 |	"SEQUENCE"
 |	"TOPOLOGY"
 |	"USERS"
+|	"NODES"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -6061,7 +6063,7 @@ UnReservedKeyword:
 |	"RATE_LIMIT"
 |	"RESTORE"
 |	"RESTORES"
-| 	"RULES"
+|	"RULES"
 |	"SEND_CREDENTIALS_TO_TIKV"
 |	"LAST_BACKUP"
 |	"CHECKPOINT"
@@ -6093,7 +6095,7 @@ UnReservedKeyword:
 |	"LOCKED"
 |	"CLUSTERED"
 |	"NONCLUSTERED"
-|   "TABLE_RULES"
+|	"TABLE_RULES"
 |	"PRESERVE"
 
 TiDBKeyword:
@@ -10277,7 +10279,6 @@ NumList:
 		$$ = append($1.([]int64), $3.(int64))
 	}
 
-/****************************Show Statement*******************************/
 Tenant:
 	Identifier
 
@@ -10301,7 +10302,7 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
-|   "SHOW" "TABLE" "RULES" "FROM" TableName
+|	"SHOW" "TABLE" "RULES" "FROM" TableName
 	{
 		$$ = &ast.ShowStmt{
 			Tp:    ast.ShowTableRules,
@@ -10312,6 +10313,13 @@ ShowStmt:
 	{
 		$$ = &ast.ShowStmt{
 			Tp:     ast.ShowUsers,
+			Tenant: $4,
+		}
+	}
+|	"SHOW" "NODES" "FROM" Tenant
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowNodes,
 			Tenant: $4,
 		}
 	}
@@ -10329,7 +10337,7 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
-|   "SHOW" "DATABASE" "RULES" "FROM" DBName
+|	"SHOW" "DATABASE" "RULES" "FROM" DBName
 	{
 		$$ = &ast.ShowStmt{
 			Tp:     ast.ShowDatabaseRules,
