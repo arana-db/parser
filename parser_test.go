@@ -3544,6 +3544,7 @@ func TestDDL(t *testing.T) {
 		{"show users from xxx", true, "SHOW USERS FROM `xxx`"},
 		// for show nodes
 		{"show nodes from xxx", true, "SHOW NODES FROM `xxx`"},
+
 		// for show replicas
 		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy
