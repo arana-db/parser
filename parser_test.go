@@ -3542,6 +3542,9 @@ func TestDDL(t *testing.T) {
 		{"show table rules from xxx", true, "SHOW TABLE RULES FROM `xxx`"},
 		{"show table rules from xxx.yyy", true, "SHOW TABLE RULES FROM `xxx`.`yyy`"},
 		{"show users from xxx", true, "SHOW USERS FROM `xxx`"},
+		// for show nodes
+		{"show nodes from xxx", true, "SHOW NODES FROM `xxx`"},
+
 		// for show replicas
 		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy
