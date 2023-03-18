@@ -1128,6 +1128,8 @@ func TestDBAStmt(t *testing.T) {
 		// for show create sequence
 		{"show create sequence seq", true, "SHOW CREATE SEQUENCE `seq`"},
 		{"show create sequence test.seq", true, "SHOW CREATE SEQUENCE `test`.`seq`"},
+		// for show sharding table
+		{"show sharding table from xxx", true, "SHOW SHARDING TABLE FROM `xxx`"},
 		// for show stats_extended.
 		{"show stats_extended", true, "SHOW STATS_EXTENDED"},
 		{"show stats_extended where table_name = 't'", true, "SHOW STATS_EXTENDED WHERE `table_name`=_UTF8MB4't'"},
