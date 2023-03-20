@@ -2624,6 +2624,7 @@ const (
 	ShowTableRules
 	ShowUsers
 	ShowDatabaseRules
+	ShowShardingTable
 )
 
 const (
@@ -2734,6 +2735,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowDatabaseRules:
 		ctx.WriteKeyWord("DATABASE RULES FROM ")
+		ctx.WriteName(n.DBName)
+	case ShowShardingTable:
+		ctx.WriteKeyWord("SHARDING TABLE FROM ")
 		ctx.WriteName(n.DBName)
 	case ShowCreateDatabase:
 		ctx.WriteKeyWord("CREATE DATABASE ")

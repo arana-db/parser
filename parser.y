@@ -554,6 +554,7 @@ import (
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
 	setval                "SETVAL"
+	sharding              "SHARDING"
 	shardRowIDBits        "SHARD_ROW_ID_BITS"
 	share                 "SHARE"
 	shared                "SHARED"
@@ -6096,6 +6097,7 @@ UnReservedKeyword:
 |	"CLUSTERED"
 |	"NONCLUSTERED"
 |	"TABLE_RULES"
+|	"SHARDING"
 |	"PRESERVE"
 
 TiDBKeyword:
@@ -10344,6 +10346,14 @@ ShowStmt:
 			DBName: $5,
 		}
 	}
+|	"SHOW" "SHARDING" "TABLE" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowShardingTable,
+			DBName: $5,
+		}
+	}
+
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
 	{
 		$$ = &ast.ShowStmt{

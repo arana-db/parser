@@ -639,6 +639,7 @@ var tokenMap = map[string]int{
 	"SHARD_ROW_ID_BITS":        shardRowIDBits,
 	"SHARE":                    share,
 	"SHARED":                   shared,
+	"SHARDING":                 sharding,
 	"SHOW":                     show,
 	"SHUTDOWN":                 shutdown,
 	"SIGNED":                   signed,
