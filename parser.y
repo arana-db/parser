@@ -248,6 +248,7 @@ import (
 	straightJoin      "STRAIGHT_JOIN"
 	tableKwd          "TABLE"
 	tableSample       "TABLESAMPLE"
+	tableRules        "TABLERULES"
 	stored            "STORED"
 	terminated        "TERMINATED"
 	then              "THEN"
@@ -536,6 +537,7 @@ import (
 	rowCount              "ROW_COUNT"
 	rowFormat             "ROW_FORMAT"
 	rtree                 "RTREE"
+	rules                 "RULES"
 	san                   "SAN"
 	second                "SECOND"
 	secondaryEngine       "SECONDARY_ENGINE"
@@ -547,10 +549,12 @@ import (
 	sequence              "SEQUENCE"
 	topology              "TOPOLOGY"
 	users                 "USERS"
+	nodes                 "NODES"
 	serial                "SERIAL"
 	serializable          "SERIALIZABLE"
 	session               "SESSION"
 	setval                "SETVAL"
+	sharding              "SHARDING"
 	shardRowIDBits        "SHARD_ROW_ID_BITS"
 	share                 "SHARE"
 	shared                "SHARED"
@@ -591,6 +595,7 @@ import (
 	system                "SYSTEM"
 	systemTime            "SYSTEM_TIME"
 	tableChecksum         "TABLE_CHECKSUM"
+	tableRules            "TABLE_RULES"
 	tables                "TABLES"
 	tablespace            "TABLESPACE"
 	temporary             "TEMPORARY"
@@ -6041,6 +6046,7 @@ UnReservedKeyword:
 |	"SEQUENCE"
 |	"TOPOLOGY"
 |	"USERS"
+|	"NODES"
 |	"MAX_MINUTES"
 |	"MAX_IDXNUM"
 |	"PER_TABLE"
@@ -6058,6 +6064,7 @@ UnReservedKeyword:
 |	"RATE_LIMIT"
 |	"RESTORE"
 |	"RESTORES"
+|	"RULES"
 |	"SEND_CREDENTIALS_TO_TIKV"
 |	"LAST_BACKUP"
 |	"CHECKPOINT"
@@ -6089,6 +6096,8 @@ UnReservedKeyword:
 |	"LOCKED"
 |	"CLUSTERED"
 |	"NONCLUSTERED"
+|	"TABLE_RULES"
+|	"SHARDING"
 |	"PRESERVE"
 
 TiDBKeyword:
@@ -10272,7 +10281,6 @@ NumList:
 		$$ = append($1.([]int64), $3.(int64))
 	}
 
-/****************************Show Statement*******************************/
 Tenant:
 	Identifier
 
@@ -10299,10 +10307,24 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
+|	"SHOW" "TABLE" "RULES" "FROM" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:    ast.ShowTableRules,
+			Table: $5.(*ast.TableName),
+		}
+	}
 |	"SHOW" "USERS" "FROM" Tenant
 	{
 		$$ = &ast.ShowStmt{
 			Tp:     ast.ShowUsers,
+			Tenant: $4,
+		}
+	}
+|	"SHOW" "NODES" "FROM" Tenant
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowNodes,
 			Tenant: $4,
 		}
 	}
@@ -10320,6 +10342,21 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
+|	"SHOW" "DATABASE" "RULES" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowDatabaseRules,
+			DBName: $5,
+		}
+	}
+|	"SHOW" "SHARDING" "TABLE" "FROM" DBName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:     ast.ShowShardingTable,
+			DBName: $5,
+		}
+	}
+
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
 	{
 		$$ = &ast.ShowStmt{

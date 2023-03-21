@@ -1124,9 +1124,13 @@ func TestDBAStmt(t *testing.T) {
 		// for show create database
 		{"show create database d1", true, "SHOW CREATE DATABASE `d1`"},
 		{"show create database if not exists d1", true, "SHOW CREATE DATABASE IF NOT EXISTS `d1`"},
+		// for show databse rules
+		{"show database rules from xxx", true, "SHOW DATABASE RULES FROM `xxx`"},
 		// for show create sequence
 		{"show create sequence seq", true, "SHOW CREATE SEQUENCE `seq`"},
 		{"show create sequence test.seq", true, "SHOW CREATE SEQUENCE `test`.`seq`"},
+		// for show sharding table
+		{"show sharding table from xxx", true, "SHOW SHARDING TABLE FROM `xxx`"},
 		// for show stats_extended.
 		{"show stats_extended", true, "SHOW STATS_EXTENDED"},
 		{"show stats_extended where table_name = 't'", true, "SHOW STATS_EXTENDED WHERE `table_name`=_UTF8MB4't'"},
@@ -3537,7 +3541,13 @@ func TestDDL(t *testing.T) {
 		// for show topology
 		{"show topology from xxx", true, "SHOW TOPOLOGY FROM `xxx`"},
 		{"show topology from xxx.yyy", true, "SHOW TOPOLOGY FROM `xxx`.`yyy`"},
+		// for show table rules
+		{"show table rules from xxx", true, "SHOW TABLE RULES FROM `xxx`"},
+		{"show table rules from xxx.yyy", true, "SHOW TABLE RULES FROM `xxx`.`yyy`"},
 		{"show users from xxx", true, "SHOW USERS FROM `xxx`"},
+		// for show nodes
+		{"show nodes from xxx", true, "SHOW NODES FROM `xxx`"},
+
 		// for show replicas
 		{"show replicas", true, "SHOW REPLICAS"},
 		// for create placement policy
