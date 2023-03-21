@@ -1759,9 +1759,10 @@ type StatisticsSpec struct {
 
 // CreateStatisticsStmt is a statement to create extended statistics.
 // Examples:
-//   CREATE STATISTICS stats1 (cardinality) ON t(a, b, c);
-//   CREATE STATISTICS stats2 (dependency) ON t(a, b);
-//   CREATE STATISTICS stats3 (correlation) ON t(a, b);
+//
+//	CREATE STATISTICS stats1 (cardinality) ON t(a, b, c);
+//	CREATE STATISTICS stats2 (dependency) ON t(a, b);
+//	CREATE STATISTICS stats3 (correlation) ON t(a, b);
 type CreateStatisticsStmt struct {
 	stmtNode
 
@@ -1829,7 +1830,8 @@ func (n *CreateStatisticsStmt) Accept(v Visitor) (Node, bool) {
 
 // DropStatisticsStmt is a statement to drop extended statistics.
 // Examples:
-//   DROP STATISTICS stats1;
+//
+//	DROP STATISTICS stats1;
 type DropStatisticsStmt struct {
 	stmtNode
 
@@ -1960,6 +1962,7 @@ const (
 )
 
 // ShowSlow is used for the following command:
+//
 //	admin show slow top [ internal | all] N
 //	admin show slow recent N
 type ShowSlow struct {
@@ -3417,7 +3420,7 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 	}
 	// Hints without args except query block.
 	switch n.HintName.L {
-	case "hash_agg", "stream_agg", "agg_to_cop", "read_consistent_replica", "no_index_merge", "qb_name", "ignore_plan_cache", "limit_to_cop":
+	case "hash_agg", "stream_agg", "agg_to_cop", "read_consistent_replica", "qb_name", "ignore_plan_cache", "limit_to_cop":
 		ctx.WritePlain(")")
 		return nil
 	}
@@ -3430,15 +3433,20 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 		ctx.WritePlainf("%d", n.HintData.(uint64))
 	case "nth_plan":
 		ctx.WritePlainf("%d", n.HintData.(int64))
-	case "tidb_hj", "tidb_smj", "tidb_inlj", "hash_join", "merge_join", "inl_join", "broadcast_join", "broadcast_join_local", "inl_hash_join", "inl_merge_join",
-		"join_prefix", "join_order", "join_suffix", "merge", "no_merge":
+	case "tidb_hj", "tidb_smj", "tidb_inlj", "hash_join", "merge_join", "inl_join", "broadcast_join",
+		"broadcast_join_local", "inl_hash_join", "inl_merge_join", "no_hash_join", "bka", "no_bka",
+		"bnl", "no_bnl", "derived_condition_pushdown", "no_derived_condition_pushdown",
+		"join_fixed_order", "join_prefix", "join_order", "join_suffix", "merge", "no_merge":
 		for i, table := range n.Tables {
 			if i != 0 {
 				ctx.WritePlain(", ")
 			}
 			table.Restore(ctx)
 		}
-	case "use_index", "ignore_index", "use_index_merge", "force_index", "mrr", "no_mrr", "no_icp", "no_range_optimization", "order_index", "no_order_index", "skip_scan", "no_skip_scan":
+	case "use_index", "ignore_index", "use_index_merge", "force_index", "mrr", "no_mrr", "no_icp",
+		"no_range_optimization", "order_index", "no_order_index", "skip_scan", "no_skip_scan",
+		"group_index", "no_group_index", "index", "no_index", "index_merge", "no_index_merge",
+		"join_index", "no_join_index":
 		n.Tables[0].Restore(ctx)
 		if len(n.Indexes) != 0 {
 			ctx.WritePlain(" ")

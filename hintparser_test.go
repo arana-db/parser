@@ -112,19 +112,688 @@ func TestParseHint(t *testing.T) {
 				`Optimizer hint syntax error at line 1 `,
 			},
 		},
+		// ** Table **//
+		// BKA and NO_BKA's Applicable Scopes `Query block` and `Table`
 		{
-			input: "JOIN_FIXED_ORDER() BKA()",
-			errs: []string{
-				`Optimizer hint JOIN_FIXED_ORDER is not supported`,
-				`Optimizer hint BKA is not supported`,
+			input: "BKA() BKA(@qb1) BKA(@qb1 tbl1) BKA(@qb1 tbl1,tbl2) BKA(tbl1) BKA(tbl1@qb1) BKA(tbl1@qb1, tbl2@qb2) " +
+				"NO_BKA() NO_BKA(@qb1) NO_BKA(@qb1 tbl1) NO_BKA(@qb1 tbl1,tbl2) NO_BKA(tbl1) NO_BKA(tbl1@qb1) NO_BKA(tbl1@qb1, tbl2@qb2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("BKA"),
+				},
+				{
+					HintName: model.NewCIStr("BKA"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("BKA"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BKA"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BKA"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BKA"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BKA"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BKA"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
 			},
 		},
+		// BNL and NO_BNL's Applicable Scopes `Query block` and `Table`
 		{
-			input: "HASH_JOIN() TIDB_HJ(@qb1) INL_JOIN(x, `y y`.z) MERGE_JOIN(w@`First QB`)",
+			input: "BNL() BNL(@qb1) BNL(@qb1 tbl1) BNL(@qb1 tbl1,tbl2) BNL(tbl1) BNL(tbl1@qb1) BNL(tbl1@qb1, tbl2@qb2) " +
+				"NO_BNL() NO_BNL(@qb1) NO_BNL(@qb1 tbl1) NO_BNL(@qb1 tbl1,tbl2) NO_BNL(tbl1) NO_BNL(tbl1@qb1) NO_BNL(tbl1@qb1, tbl2@qb2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("BNL"),
+				},
+				{
+					HintName: model.NewCIStr("BNL"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("BNL"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BNL"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BNL"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BNL"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("BNL"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_BNL"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		// DERIVED_CONDITION_PUSHDOWN and NO_DERIVED_CONDITION_PUSHDOWN's Applicable Scopes `Query block` and `Table`
+		{
+			input: "DERIVED_CONDITION_PUSHDOWN() DERIVED_CONDITION_PUSHDOWN(@qb1) DERIVED_CONDITION_PUSHDOWN(@qb1 tbl1) DERIVED_CONDITION_PUSHDOWN(@qb1 tbl1,tbl2) DERIVED_CONDITION_PUSHDOWN(tbl1) DERIVED_CONDITION_PUSHDOWN(tbl1@qb1) DERIVED_CONDITION_PUSHDOWN(tbl1@qb1, tbl2@qb2) " +
+				"NO_DERIVED_CONDITION_PUSHDOWN() NO_DERIVED_CONDITION_PUSHDOWN(@qb1) NO_DERIVED_CONDITION_PUSHDOWN(@qb1 tbl1) NO_DERIVED_CONDITION_PUSHDOWN(@qb1 tbl1,tbl2) NO_DERIVED_CONDITION_PUSHDOWN(tbl1) NO_DERIVED_CONDITION_PUSHDOWN(tbl1@qb1) NO_DERIVED_CONDITION_PUSHDOWN(tbl1@qb1, tbl2@qb2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+				},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_DERIVED_CONDITION_PUSHDOWN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		// HASH_JOIN and NO_HASH_JOIN's Applicable Scopes `Query block` and `Table`
+		{
+			input: "HASH_JOIN() HASH_JOIN(@qb1) HASH_JOIN(@qb1 tbl1) HASH_JOIN(@qb1 tbl1,tbl2) HASH_JOIN(tbl1) HASH_JOIN(tbl1@qb1) HASH_JOIN(tbl1@qb1, tbl2@qb2) " +
+				"NO_HASH_JOIN() NO_HASH_JOIN(@qb1) NO_HASH_JOIN(@qb1 tbl1) NO_HASH_JOIN(@qb1 tbl1,tbl2) NO_HASH_JOIN(tbl1) NO_HASH_JOIN(tbl1@qb1) NO_HASH_JOIN(tbl1@qb1, tbl2@qb2) ",
 			output: []*ast.TableOptimizerHint{
 				{
 					HintName: model.NewCIStr("HASH_JOIN"),
 				},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_HASH_JOIN"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		// INDEX_MERGE NO_INDEX_MERGE
+		{
+			input: "INDEX_MERGE(t1) INDEX_MERGE(t1 idx1,idx2) INDEX_MERGE(@qb1 t1 idx1,idx2) INDEX_MERGE(t1@qb1 idx1,idx2) " +
+				"NO_INDEX_MERGE(t1) NO_INDEX_MERGE(t1 idx1,idx2) NO_INDEX_MERGE(@qb1 t1 idx1,idx2) NO_INDEX_MERGE(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("NO_INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_INDEX_MERGE"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		// JOIN_FIXED_ORDER's Applicable Scopes `Query block`
+		{
+			input: "JOIN_FIXED_ORDER() JOIN_FIXED_ORDER(@qb1) JOIN_FIXED_ORDER(@qb1 tbl1) JOIN_FIXED_ORDER(@qb1 tbl1,tbl2) " +
+				"JOIN_FIXED_ORDER(tbl1) JOIN_FIXED_ORDER(tbl1@qb1) JOIN_FIXED_ORDER(tbl1@qb1, tbl2@qb2)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+				},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_FIXED_ORDER"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+
+		// ** index level **//
+		// GROUP_INDEX
+		{
+			input: "GROUP_INDEX(t1) GROUP_INDEX(t1 idx1,idx2) GROUP_INDEX(@qb1 t1 idx1,idx2) GROUP_INDEX(t1@qb1 idx1,idx2) " +
+				"NO_GROUP_INDEX(t1) NO_GROUP_INDEX(t1 idx1,idx2) NO_GROUP_INDEX(@qb1 t1 idx1,idx2) NO_GROUP_INDEX(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("NO_GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_GROUP_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+
+		// MERGE and NO_MERGE's Applicable Scopes `Table`
+		{
+			input: "MERGE() MERGE(@qb1) MERGE(@qb1 tbl1) MERGE(@qb1 tbl1,tbl2) MERGE(tbl1) MERGE(tbl1@qb1) MERGE(tbl1@qb1, tbl2@qb2) " +
+				"NO_MERGE() NO_MERGE(@qb1) NO_MERGE(@qb1 tbl1) NO_MERGE(@qb1 tbl1,tbl2) NO_MERGE(tbl1) NO_MERGE(tbl1@qb1) NO_MERGE(tbl1@qb1, tbl2@qb2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("MERGE"),
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("NO_MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		{
+			input: "TIDB_HJ(@qb1) INL_JOIN(x, `y y`.z) MERGE_JOIN(w@`First QB`)",
+			output: []*ast.TableOptimizerHint{
 				{
 					HintName: model.NewCIStr("TIDB_HJ"),
 					QBName:   model.NewCIStr("qb1"),
@@ -145,7 +814,7 @@ func TestParseHint(t *testing.T) {
 			},
 		},
 		{
-			input: "USE_INDEX_MERGE(@qb1 tbl1 x, y, z) IGNORE_INDEX(tbl2@qb2) USE_INDEX(tbl3 PRIMARY) FORCE_INDEX(tbl4@qb3 c1)",
+			input: "USE_INDEX_MERGE(@qb1 tbl1 x, y, z) IGNORE_INDEX(tbl2@qb2) USE_INDEX(tbl3 PRIMARY) FORCE_INDEX(tbl4@qb3 c1) ",
 			output: []*ast.TableOptimizerHint{
 				{
 					HintName: model.NewCIStr("USE_INDEX_MERGE"),
@@ -234,7 +903,7 @@ func TestParseHint(t *testing.T) {
 			},
 		},
 		{
-			input: "USE_TOJA(TRUE) IGNORE_PLAN_CACHE() USE_CASCADES(TRUE) QUERY_TYPE(@qb1 OLAP) QUERY_TYPE(OLTP) NO_INDEX_MERGE()",
+			input: "USE_TOJA(TRUE) IGNORE_PLAN_CACHE() USE_CASCADES(TRUE) QUERY_TYPE(@qb1 OLAP) QUERY_TYPE(OLTP)",
 			output: []*ast.TableOptimizerHint{
 				{
 					HintName: model.NewCIStr("USE_TOJA"),
@@ -255,9 +924,6 @@ func TestParseHint(t *testing.T) {
 				{
 					HintName: model.NewCIStr("QUERY_TYPE"),
 					HintData: model.NewCIStr("OLTP"),
-				},
-				{
-					HintName: model.NewCIStr("NO_INDEX_MERGE"),
 				},
 			},
 		},
