@@ -10356,7 +10356,6 @@ ShowStmt:
 			DBName: $5,
 		}
 	}
-
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
 	{
 		$$ = &ast.ShowStmt{
