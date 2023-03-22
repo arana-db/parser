@@ -2666,7 +2666,7 @@ type ShowStmt struct {
 
 	ShowProfileTypes []int  // Used for `SHOW PROFILE` syntax
 	ShowProfileArgs  *int64 // Used for `SHOW PROFILE` syntax
-	ShowProfileLimit *Limit // Used for `SHOW PROFILE` syntax
+	Limit            *Limit // Used for `SHOW PROFILE` `SHOW WARNINGS` syntax
 }
 
 // Restore implements Node interface.
@@ -2860,9 +2860,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 			ctx.WriteKeyWord(" FOR QUERY ")
 			ctx.WritePlainf("%d", *n.ShowProfileArgs)
 		}
-		if n.ShowProfileLimit != nil {
+		if n.Limit != nil {
 			ctx.WritePlain(" ")
-			if err := n.ShowProfileLimit.Restore(ctx); err != nil {
+			if err := n.Limit.Restore(ctx); err != nil {
 				return errors.Annotate(err, "An error occurred while restore ShowStmt.WritePlain")
 			}
 		}
@@ -2935,6 +2935,12 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 			restoreShowDatabaseNameOpt()
 		case ShowWarnings:
 			ctx.WriteKeyWord("WARNINGS")
+			if n.Limit != nil {
+				ctx.WritePlain(" ")
+				if err := n.Limit.Restore(ctx); err != nil {
+					return errors.Annotate(err, "An error occurred while restore ShowStmt.WritePlain")
+				}
+			}
 		case ShowErrors:
 			ctx.WriteKeyWord("ERRORS")
 		case ShowVariables:

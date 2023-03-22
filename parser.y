@@ -10285,7 +10285,7 @@ Tenant:
 	Identifier
 
 ShowStmt:
-	"SHOW" ShowTargetFilterable ShowLikeOrWhereOpt
+	"SHOW" ShowTargetFilterable ShowLikeOrWhereOpt SelectStmtLimitOpt
 	{
 		stmt := $2.(*ast.ShowStmt)
 		if $3 != nil {
@@ -10294,6 +10294,9 @@ ShowStmt:
 			} else {
 				stmt.Where = $3.(ast.ExprNode)
 			}
+		}
+		if $4 != nil {
+			stmt.Limit = $4.(*ast.Limit)
 		}
 		$$ = stmt
 	}
@@ -10353,7 +10356,6 @@ ShowStmt:
 			DBName: $5,
 		}
 	}
-
 |	"SHOW" "CREATE" "DATABASE" IfNotExists DBName
 	{
 		$$ = &ast.ShowStmt{
@@ -10482,7 +10484,7 @@ ShowStmt:
 			v.ShowProfileArgs = $4.(*int64)
 		}
 		if $5 != nil {
-			v.ShowProfileLimit = $5.(*ast.Limit)
+			v.Limit = $5.(*ast.Limit)
 		}
 		$$ = v
 	}
