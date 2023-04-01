@@ -3430,16 +3430,19 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 		ctx.WritePlainf("%d", n.HintData.(uint64))
 	case "nth_plan":
 		ctx.WritePlainf("%d", n.HintData.(int64))
-	case "tidb_hj", "tidb_smj", "tidb_inlj", "hash_join", "merge_join", "inl_join", "broadcast_join", "broadcast_join_local", "inl_hash_join", "inl_merge_join":
+	case "tidb_hj", "tidb_smj", "tidb_inlj", "hash_join", "merge_join", "inl_join", "broadcast_join", "broadcast_join_local", "inl_hash_join", "inl_merge_join",
+		"join_prefix", "join_order", "join_suffix", "merge", "no_merge":
 		for i, table := range n.Tables {
 			if i != 0 {
 				ctx.WritePlain(", ")
 			}
 			table.Restore(ctx)
 		}
-	case "use_index", "ignore_index", "use_index_merge", "force_index":
+	case "use_index", "ignore_index", "use_index_merge", "force_index", "mrr", "no_mrr", "no_icp", "no_range_optimization", "order_index", "no_order_index", "skip_scan", "no_skip_scan":
 		n.Tables[0].Restore(ctx)
-		ctx.WritePlain(" ")
+		if len(n.Indexes) != 0 {
+			ctx.WritePlain(" ")
+		}
 		for i, index := range n.Indexes {
 			if i != 0 {
 				ctx.WritePlain(", ")
@@ -3452,8 +3455,16 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 		} else {
 			ctx.WritePlain("FALSE")
 		}
-	case "query_type":
+	case "query_type", "resource_group":
 		ctx.WriteKeyWord(n.HintData.(model.CIStr).String())
+	case "semijoin", "no_semijoin", "subquery":
+		hintDataList := n.HintData.([]model.CIStr)
+		for i, hintData := range hintDataList {
+			if i != 0 {
+				ctx.WritePlain(", ")
+			}
+			ctx.WriteKeyWord(hintData.String())
+		}
 	case "memory_quota":
 		ctx.WritePlainf("%d MB", n.HintData.(int64)/1024/1024)
 	case "read_from_storage":

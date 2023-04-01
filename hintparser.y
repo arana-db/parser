@@ -132,6 +132,7 @@ import (
 	hintFirstMatch      "FIRSTMATCH"
 	hintLooseScan       "LOOSESCAN"
 	hintMaterialization "MATERIALIZATION"
+	hintIntoExist       "INTOEXISTS"
 
 %type	<ident>
 	Identifier                             "identifier (including keywords)"
@@ -165,8 +166,6 @@ import (
 	HintIndexList           "table name with index list in optimizer hint"
 	IndexNameList           "index list in optimizer hint"
 	IndexNameListOpt        "optional index list in optimizer hint"
-	SubqueryStrategies      "subquery strategies"
-	SubqueryStrategiesOpt   "optional subquery strategies"
 	HintTrueOrFalse         "true or false in optimizer hint"
 	HintStorageTypeAndTable "storage type and tables in optimizer hint"
 
@@ -174,8 +173,10 @@ import (
 	HintTable "Table in optimizer hint"
 
 %type	<modelIdents>
-	PartitionList    "partition name list in optimizer hint"
-	PartitionListOpt "optional partition name list in optimizer hint"
+	PartitionList         "partition name list in optimizer hint"
+	PartitionListOpt      "optional partition name list in optimizer hint"
+	SubqueryStrategies    "subquery strategies"
+	SubqueryStrategiesOpt "optional subquery strategies"
 
 
 %start	Start
@@ -220,8 +221,9 @@ TableOptimizerHintOpt:
 	}
 |	JoinOrderOptimizerHintName '(' HintTableList ')'
 	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
+		h := $3
+		h.HintName = model.NewCIStr($1)
+		$$ = h
 	}
 |	UnsupportedTableLevelOptimizerHintName '(' HintTableListOpt ')'
 	{
@@ -281,8 +283,10 @@ TableOptimizerHintOpt:
 	}
 |	"RESOURCE_GROUP" '(' Identifier ')'
 	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
+		$$ = &ast.TableOptimizerHint{
+			HintName: model.NewCIStr($1),
+			HintData: model.NewCIStr($3),
+		}
 	}
 |	"QB_NAME" '(' Identifier ')'
 	{
@@ -494,13 +498,20 @@ IndexNameList:
  */
 SubqueryStrategiesOpt:
 	/* empty */
-	{}
+	{
+		$$ = []model.CIStr{}
+	}
 |	SubqueryStrategies
 
 SubqueryStrategies:
 	SubqueryStrategy
-	{}
-|	SubqueryStrategies ',' SubqueryStrategy
+	{
+		$$ = []model.CIStr{model.NewCIStr($1)}
+	}
+|	SubqueryStrategies CommaOpt SubqueryStrategy
+	{
+		$$ = append($1, model.NewCIStr($3))
+	}
 
 Value:
 	hintStringLit
@@ -555,10 +566,6 @@ SupportedTableLevelOptimizerHintName:
 |	"HASH_JOIN"
 |	"MERGE"
 |	"NO_MERGE"
-|	"MRR"
-|	"NO_MRR"
-|	"NO_ICP"
-|	"NO_RANGE_OPTIMIZATION"
 
 UnsupportedIndexLevelOptimizerHintName:
 	"INDEX_MERGE"
@@ -573,16 +580,23 @@ SupportedIndexLevelOptimizerHintName:
 |	"NO_ORDER_INDEX"
 |	"SKIP_SCAN"
 |	"NO_SKIP_SCAN"
+|	"MRR"
+|	"NO_MRR"
+|	"NO_ICP"
+|	"NO_RANGE_OPTIMIZATION"
 
 SubqueryOptimizerHintName:
 	"SEMIJOIN"
 |	"NO_SEMIJOIN"
+/*For SUBQUERY hints, permitted strategy values are different to SEMIJOIN and NO_SEMIJOIN, but not limit strictly here*/
+|	"SUBQUERY"
 
 SubqueryStrategy:
 	"DUPSWEEDOUT"
 |	"FIRSTMATCH"
 |	"LOOSESCAN"
 |	"MATERIALIZATION"
+|	"INTOEXISTS"
 
 BooleanHintName:
 	"USE_TOJA"
@@ -675,4 +689,5 @@ Identifier:
 |	"FIRSTMATCH"
 |	"LOOSESCAN"
 |	"MATERIALIZATION"
+|	"INTOEXISTS"
 %%
