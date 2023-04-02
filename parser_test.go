@@ -3755,7 +3755,6 @@ func TestErrorMsg(t *testing.T) {
 }
 
 func TestOptimizerHints(t *testing.T) {
-	sb := strings.Builder{}
 	p := parser.New()
 	// Test USE_INDEX
 	stmt, _, err := p.Parse("select /*+ USE_INDEX(T1,T2), use_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
@@ -4229,7 +4228,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 3)
 	require.Equal(t, "join_prefix", hints[0].HintName.L)
@@ -4243,7 +4241,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "max_execution_time", hints[0].HintName.L)
@@ -4256,7 +4253,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "no_merge", hints[0].HintName.L)
@@ -4268,7 +4264,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "mrr", hints[0].HintName.L)
@@ -4280,7 +4275,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "no_range_optimization", hints[0].HintName.L)
@@ -4292,7 +4286,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "no_icp", hints[0].HintName.L)
@@ -4304,7 +4297,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "skip_scan", hints[0].HintName.L)
@@ -4316,7 +4308,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "no_semijoin", hints[0].HintName.L)
@@ -4328,7 +4319,6 @@ func TestOptimizerHints(t *testing.T) {
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
-	sb.Reset()
 	hints = selectStmt.TableHints
 	require.Len(t, hints, 1)
 	require.Equal(t, "subquery", hints[0].HintName.L)
