@@ -14,11 +14,13 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/arana-db/parser/auth"
 	"github.com/arana-db/parser/charset"
@@ -71,7 +73,42 @@ func (s SchemaState) String() string {
 	case StateGlobalTxnOnly:
 		return "global txn only"
 	default:
-		return "queueing"
+		return "none"
+	}
+}
+
+// BackfillState is the state used by the backfill-merge process.
+type BackfillState byte
+
+const (
+	// BackfillStateInapplicable means the backfill-merge process is not used.
+	BackfillStateInapplicable BackfillState = iota
+	// BackfillStateRunning is the state that the backfill process is running.
+	// In this state, the index's write and delete operations are redirected to a temporary index.
+	BackfillStateRunning
+	// BackfillStateReadyToMerge is the state that the temporary index's records are ready to be merged back
+	// to the origin index.
+	// In this state, the index's write and delete operations are copied to a temporary index.
+	// This state is used to make sure that all the TiDB instances are aware of the copy during the merge(BackfillStateMerging).
+	BackfillStateReadyToMerge
+	// BackfillStateMerging is the state that the temp index is merging back to the origin index.
+	// In this state, the index's write and delete operations are copied to a temporary index.
+	BackfillStateMerging
+)
+
+// String implements fmt.Stringer interface.
+func (s BackfillState) String() string {
+	switch s {
+	case BackfillStateRunning:
+		return "backfill state running"
+	case BackfillStateReadyToMerge:
+		return "backfill state ready to merge"
+	case BackfillStateMerging:
+		return "backfill state merging"
+	case BackfillStateInapplicable:
+		return "backfill state inapplicable"
+	default:
+		return "backfill state unknown"
 	}
 }
 
@@ -127,6 +164,9 @@ type ColumnInfo struct {
 
 // Clone clones ColumnInfo.
 func (c *ColumnInfo) Clone() *ColumnInfo {
+	if c == nil {
+		return nil
+	}
 	nc := *c
 	return &nc
 }
@@ -142,7 +182,7 @@ func (c *ColumnInfo) IsGenerated() bool {
 // The mysql.TypeBit type supports the null default value.
 func (c *ColumnInfo) SetOriginDefaultValue(value interface{}) error {
 	c.OriginDefaultValue = value
-	if c.Tp == mysql.TypeBit {
+	if c.GetType() == mysql.TypeBit {
 		if value == nil {
 			return nil
 		}
@@ -157,7 +197,7 @@ func (c *ColumnInfo) SetOriginDefaultValue(value interface{}) error {
 
 // GetOriginDefaultValue gets the origin default value.
 func (c *ColumnInfo) GetOriginDefaultValue() interface{} {
-	if c.Tp == mysql.TypeBit && c.OriginDefaultValueBit != nil {
+	if c.GetType() == mysql.TypeBit && c.OriginDefaultValueBit != nil {
 		// If the column type is BIT, both `OriginDefaultValue` and `DefaultValue` of ColumnInfo are corrupted,
 		// because the content before json.Marshal is INCONSISTENT with the content after json.Unmarshal.
 		return string(c.OriginDefaultValueBit)
@@ -168,7 +208,7 @@ func (c *ColumnInfo) GetOriginDefaultValue() interface{} {
 // SetDefaultValue sets the default value.
 func (c *ColumnInfo) SetDefaultValue(value interface{}) error {
 	c.DefaultValue = value
-	if c.Tp == mysql.TypeBit {
+	if c.GetType() == mysql.TypeBit {
 		// For mysql.TypeBit type, the default value storage format must be a string.
 		// Other value such as int must convert to string format first.
 		// The mysql.TypeBit type supports the null default value.
@@ -188,7 +228,7 @@ func (c *ColumnInfo) SetDefaultValue(value interface{}) error {
 // Default value use to stored in DefaultValue field, but now,
 // bit type default value will store in DefaultValueBit for fix bit default value decode/encode bug.
 func (c *ColumnInfo) GetDefaultValue() interface{} {
-	if c.Tp == mysql.TypeBit && c.DefaultValueBit != nil {
+	if c.GetType() == mysql.TypeBit && c.DefaultValueBit != nil {
 		return string(c.DefaultValueBit)
 	}
 	return c.DefaultValue
@@ -197,14 +237,17 @@ func (c *ColumnInfo) GetDefaultValue() interface{} {
 // GetTypeDesc gets the description for column type.
 func (c *ColumnInfo) GetTypeDesc() string {
 	desc := c.FieldType.CompactStr()
-	if mysql.HasUnsignedFlag(c.Flag) && c.Tp != mysql.TypeBit && c.Tp != mysql.TypeYear {
+	if mysql.HasUnsignedFlag(c.Flag) && c.GetType() != mysql.TypeBit && c.GetType() != mysql.TypeYear {
 		desc += " unsigned"
 	}
-	if mysql.HasZerofillFlag(c.Flag) && c.Tp != mysql.TypeYear {
+	if mysql.HasZerofillFlag(c.Flag) && c.GetType() != mysql.TypeYear {
 		desc += " zerofill"
 	}
 	return desc
 }
+
+// EmptyColumnInfoSize is the memory usage of ColumnInfoSize
+const EmptyColumnInfoSize = int64(unsafe.Sizeof(ColumnInfo{}))
 
 // FindColumnInfo finds ColumnInfo in cols by name.
 func FindColumnInfo(cols []*ColumnInfo, name string) *ColumnInfo {
@@ -225,6 +268,54 @@ func FindColumnInfoByID(cols []*ColumnInfo, id int64) *ColumnInfo {
 		}
 	}
 	return nil
+}
+
+// FindIndexInfoByID finds IndexInfo in indices by id.
+func FindIndexInfoByID(indices []*IndexInfo, id int64) *IndexInfo {
+	for _, idx := range indices {
+		if idx.ID == id {
+			return idx
+		}
+	}
+	return nil
+}
+
+// FindFKInfoByName finds FKInfo in fks by lowercase name.
+func FindFKInfoByName(fks []*FKInfo, name string) *FKInfo {
+	for _, fk := range fks {
+		if fk.Name.L == name {
+			return fk
+		}
+	}
+	return nil
+}
+
+// FindIndexByColumns find IndexInfo in indices which is cover the specified columns.
+func FindIndexByColumns(tbInfo *TableInfo, indices []*IndexInfo, cols ...CIStr) *IndexInfo {
+	for _, index := range indices {
+		if IsIndexPrefixCovered(tbInfo, index, cols...) {
+			return index
+		}
+	}
+	return nil
+}
+
+// IsIndexPrefixCovered checks the index's columns beginning with the cols.
+func IsIndexPrefixCovered(tbInfo *TableInfo, index *IndexInfo, cols ...CIStr) bool {
+	if len(index.Columns) < len(cols) {
+		return false
+	}
+	for i := range cols {
+		if cols[i].L != index.Columns[i].Name.L ||
+			index.Columns[i].Offset >= len(tbInfo.Columns) {
+			return false
+		}
+		colInfo := tbInfo.Columns[index.Columns[i].Offset]
+		if index.Columns[i].Length != types.UnspecifiedLength && index.Columns[i].Length < colInfo.Flen {
+			return false
+		}
+	}
+	return true
 }
 
 // ExtraHandleID is the column ID of column which we need to append to schema to occupy the handle's position
@@ -270,7 +361,11 @@ const (
 	// the tables with version < TableInfoVersion4 still use a single allocator for auto_increment and _tidb_rowid.
 	// Also see https://github.com/pingcap/tidb/issues/982.
 	TableInfoVersion4 = uint16(4)
-
+	// TableInfoVersion5 indicates that the auto_increment allocator in TiDB has been separated from
+	// _tidb_rowid allocator when AUTO_ID_CACHE is 1. This version is introduced to preserve the compatibility of old tables:
+	// the tables with version <= TableInfoVersion4 still use a single allocator for auto_increment and _tidb_rowid.
+	// Also see https://github.com/pingcap/tidb/issues/982.
+	TableInfoVersion5 = uint16(5)
 	// CurrLatestTableInfoVersion means the latest table info in the current TiDB.
 	CurrLatestTableInfoVersion = TableInfoVersion4
 )
@@ -312,6 +407,7 @@ type TableInfo struct {
 	AutoRandID      int64  `json:"auto_rand_id"`
 	MaxColumnID     int64  `json:"max_col_id"`
 	MaxIndexID      int64  `json:"max_idx_id"`
+	MaxForeignKeyID int64  `json:"max_fk_id"`
 	MaxConstraintID int64  `json:"max_cst_id"`
 	// UpdateTS is used to record the timestamp of updating the table's schema information.
 	// These changing schema operations don't include 'truncate table' and 'rename table'.
@@ -330,6 +426,8 @@ type TableInfo struct {
 	MaxShardRowIDBits uint64 `json:"max_shard_row_id_bits"`
 	// AutoRandomBits is used to set the bit number to shard automatically when PKIsHandle.
 	AutoRandomBits uint64 `json:"auto_random_bits"`
+	// AutoRandomRangeBits represents the bit number of the int primary key that will be used by TiDB.
+	AutoRandomRangeBits uint64 `json:"auto_random_range_bits"`
 	// PreSplitRegions specify the pre-split region when create table.
 	// The pre-split region num is 2^(PreSplitRegions-1).
 	// And the PreSplitRegions should less than or equal to ShardRowIDBits.
@@ -362,7 +460,17 @@ type TableInfo struct {
 
 	// StatsOptions is used when do analyze/auto-analyze for each table
 	StatsOptions *StatsOptions `json:"stats_options"`
+
+	ExchangePartitionInfo *ExchangePartitionInfo `json:"exchange_partition_info"`
+
+	TTLInfo *TTLInfo `json:"ttl_info"`
 }
+
+// SepAutoInc decides whether _rowid and auto_increment id use separate allocator.
+func (t *TableInfo) SepAutoInc() bool {
+	return t.Version >= TableInfoVersion5 && t.AutoIdCache == 1
+}
+
 type TableCacheStatusType int
 
 const (
@@ -552,6 +660,10 @@ func (t *TableInfo) Clone() *TableInfo {
 		nt.ForeignKeys[i] = t.ForeignKeys[i].Clone()
 	}
 
+	if t.TTLInfo != nil {
+		nt.TTLInfo = t.TTLInfo.Clone()
+	}
+
 	return &nt
 }
 
@@ -632,9 +744,63 @@ func (t *TableInfo) FindIndexByName(idxName string) *IndexInfo {
 	return nil
 }
 
+// FindPublicColumnByName finds the public column by name.
+func (t *TableInfo) FindPublicColumnByName(colNameL string) *ColumnInfo {
+	for _, col := range t.Cols() {
+		if col.Name.L == colNameL {
+			return col
+		}
+	}
+	return nil
+}
+
 // IsLocked checks whether the table was locked.
 func (t *TableInfo) IsLocked() bool {
 	return t.Lock != nil && len(t.Lock.Sessions) > 0
+}
+
+// MoveColumnInfo moves a column to another offset. It maintains the offsets of all affects columns and index columns,
+func (t *TableInfo) MoveColumnInfo(from, to int) {
+	if from == to {
+		return
+	}
+	updatedOffsets := make(map[int]int)
+	src := t.Columns[from]
+	if from < to {
+		for i := from; i < to; i++ {
+			t.Columns[i] = t.Columns[i+1]
+			t.Columns[i].Offset = i
+			updatedOffsets[i+1] = i
+		}
+	} else if from > to {
+		for i := from; i > to; i-- {
+			t.Columns[i] = t.Columns[i-1]
+			t.Columns[i].Offset = i
+			updatedOffsets[i-1] = i
+		}
+	}
+	t.Columns[to] = src
+	t.Columns[to].Offset = to
+	updatedOffsets[from] = to
+	for _, idx := range t.Indices {
+		for _, idxCol := range idx.Columns {
+			newOffset, ok := updatedOffsets[idxCol.Offset]
+			if ok {
+				idxCol.Offset = newOffset
+			}
+		}
+	}
+}
+
+// ClearPlacement clears all table and partitions' placement settings
+func (t *TableInfo) ClearPlacement() {
+	t.PlacementPolicyRef = nil
+	if t.Partition != nil {
+		for i := range t.Partition.Definitions {
+			def := &t.Partition.Definitions[i]
+			def.PlacementPolicyRef = nil
+		}
+	}
 }
 
 // NewExtraHandleColInfo mocks a column info for extra handle column.
@@ -670,6 +836,54 @@ func NewExtraPhysTblIDColInfo() *ColumnInfo {
 	colInfo.Tp = mysql.TypeLonglong
 	colInfo.Flen, colInfo.Decimal = mysql.GetDefaultFieldLengthAndDecimal(mysql.TypeLonglong)
 	return colInfo
+}
+
+// GetPrimaryKey extract the primary key in a table and return `IndexInfo`
+// The returned primary key could be explicit or implicit.
+// If there is no explicit primary key in table,
+// the first UNIQUE INDEX on NOT NULL columns will be the implicit primary key.
+// For more information about implicit primary key, see
+// https://dev.mysql.com/doc/refman/8.0/en/invisible-indexes.html
+func (t *TableInfo) GetPrimaryKey() *IndexInfo {
+	var implicitPK *IndexInfo
+
+	for _, key := range t.Indices {
+		if key.Primary {
+			// table has explicit primary key
+			return key
+		}
+		// The case index without any columns should never happen, but still do a check here
+		if len(key.Columns) == 0 {
+			continue
+		}
+		// find the first unique key with NOT NULL columns
+		if implicitPK == nil && key.Unique {
+			// ensure all columns in unique key have NOT NULL flag
+			allColNotNull := true
+			skip := false
+			for _, idxCol := range key.Columns {
+				col := FindColumnInfo(t.Cols(), idxCol.Name.L)
+				// This index has a column in DeleteOnly state,
+				// or it is expression index (it defined on a hidden column),
+				// it can not be implicit PK, go to next index iterator
+				if col == nil || col.Hidden {
+					skip = true
+					break
+				}
+				if !mysql.HasNotNullFlag(col.Flag) {
+					allColNotNull = false
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+			if allColNotNull {
+				implicitPK = key
+			}
+		}
+	}
+	return implicitPK
 }
 
 // ColumnIsInIndex checks whether c is included in any indices of t.
@@ -830,7 +1044,13 @@ func (p PartitionType) String() string {
 	default:
 		return ""
 	}
+}
 
+// ExchangePartitionInfo provides exchange partition info.
+type ExchangePartitionInfo struct {
+	ExchangePartitionFlag  bool  `json:"exchange_partition_flag"`
+	ExchangePartitionID    int64 `json:"exchange_partition_id"`
+	ExchangePartitionDefID int64 `json:"exchange_partition_def_id"`
 }
 
 // PartitionInfo provides table partition info.
@@ -853,6 +1073,30 @@ type PartitionInfo struct {
 	Num                 uint64                `json:"num"`
 }
 
+// Clone clones itself.
+func (pi *PartitionInfo) Clone() *PartitionInfo {
+	newPi := *pi
+	newPi.Columns = make([]CIStr, len(pi.Columns))
+	copy(newPi.Columns, pi.Columns)
+
+	newPi.Definitions = make([]PartitionDefinition, len(pi.Definitions))
+	for i := range pi.Definitions {
+		newPi.Definitions[i] = pi.Definitions[i].Clone()
+	}
+
+	newPi.AddingDefinitions = make([]PartitionDefinition, len(pi.AddingDefinitions))
+	for i := range pi.AddingDefinitions {
+		newPi.AddingDefinitions[i] = pi.AddingDefinitions[i].Clone()
+	}
+
+	newPi.DroppingDefinitions = make([]PartitionDefinition, len(pi.DroppingDefinitions))
+	for i := range pi.DroppingDefinitions {
+		newPi.DroppingDefinitions[i] = pi.DroppingDefinitions[i].Clone()
+	}
+
+	return &newPi
+}
+
 // GetNameByID gets the partition name by ID.
 func (pi *PartitionInfo) GetNameByID(id int64) string {
 	definitions := pi.Definitions
@@ -860,7 +1104,7 @@ func (pi *PartitionInfo) GetNameByID(id int64) string {
 	// see https://github.com/pingcap/parser/pull/1072 for the benchmark.
 	for i := range definitions {
 		if id == definitions[i].ID {
-			return definitions[i].Name.L
+			return definitions[i].Name.O
 		}
 	}
 	return ""
@@ -930,6 +1174,30 @@ func (ci *PartitionDefinition) Clone() PartitionDefinition {
 	nci.LessThan = make([]string, len(ci.LessThan))
 	copy(nci.LessThan, ci.LessThan)
 	return nci
+}
+
+const emptyPartitionDefinitionSize = int64(unsafe.Sizeof(PartitionState{}))
+
+// MemoryUsage return the memory usage of PartitionDefinition
+func (ci *PartitionDefinition) MemoryUsage() (sum int64) {
+	if ci == nil {
+		return
+	}
+
+	sum = emptyPartitionDefinitionSize + ci.Name.MemoryUsage()
+	if ci.PlacementPolicyRef != nil {
+		sum += int64(unsafe.Sizeof(ci.PlacementPolicyRef.ID)) + ci.PlacementPolicyRef.Name.MemoryUsage()
+	}
+
+	for _, str := range ci.LessThan {
+		sum += int64(len(str))
+	}
+	for _, strs := range ci.InValues {
+		for _, str := range strs {
+			sum += int64(len(str))
+		}
+	}
+	return
 }
 
 // FindPartitionDefinitionByName finds PartitionDefinition by name.
@@ -1010,21 +1278,26 @@ const (
 // It corresponds to the statement `CREATE INDEX Name ON Table (Column);`
 // See https://dev.mysql.com/doc/refman/5.7/en/create-index.html
 type IndexInfo struct {
-	ID        int64          `json:"id"`
-	Name      CIStr          `json:"idx_name"` // Index name.
-	Table     CIStr          `json:"tbl_name"` // Table name.
-	Columns   []*IndexColumn `json:"idx_cols"` // Index columns.
-	State     SchemaState    `json:"state"`
-	Comment   string         `json:"comment"`      // Comment
-	Tp        IndexType      `json:"index_type"`   // Index type: Btree, Hash or Rtree
-	Unique    bool           `json:"is_unique"`    // Whether the index is unique.
-	Primary   bool           `json:"is_primary"`   // Whether the index is primary key.
-	Invisible bool           `json:"is_invisible"` // Whether the index is invisible.
-	Global    bool           `json:"is_global"`    // Whether the index is global.
+	ID            int64          `json:"id"`
+	Name          CIStr          `json:"idx_name"` // Index name.
+	Table         CIStr          `json:"tbl_name"` // Table name.
+	Columns       []*IndexColumn `json:"idx_cols"` // Index columns.
+	State         SchemaState    `json:"state"`
+	BackfillState BackfillState  `json:"backfill_state"`
+	Comment       string         `json:"comment"`      // Comment
+	Tp            IndexType      `json:"index_type"`   // Index type: Btree, Hash or Rtree
+	Unique        bool           `json:"is_unique"`    // Whether the index is unique.
+	Primary       bool           `json:"is_primary"`   // Whether the index is primary key.
+	Invisible     bool           `json:"is_invisible"` // Whether the index is invisible.
+	Global        bool           `json:"is_global"`    // Whether the index is global.
+	MVIndex       bool           `json:"mv_index"`     // Whether the index is multivalued index.
 }
 
 // Clone clones IndexInfo.
 func (index *IndexInfo) Clone() *IndexInfo {
+	if index == nil {
+		return nil
+	}
 	ni := *index
 	ni.Columns = make([]*IndexColumn, len(index.Columns))
 	for i := range index.Columns {
@@ -1041,6 +1314,32 @@ func (index *IndexInfo) HasPrefixIndex() bool {
 		}
 	}
 	return false
+}
+
+// HasColumnInIndexColumns checks whether the index contains the column with the specified ID.
+func (index *IndexInfo) HasColumnInIndexColumns(tblInfo *TableInfo, colID int64) bool {
+	for _, ic := range index.Columns {
+		if tblInfo.Columns[ic.Offset].ID == colID {
+			return true
+		}
+	}
+	return false
+}
+
+// FindColumnByName finds the index column with the specified name.
+func (index *IndexInfo) FindColumnByName(nameL string) *IndexColumn {
+	_, ret := FindIndexColumnByName(index.Columns, nameL)
+	return ret
+}
+
+// FindIndexColumnByName finds IndexColumn by name. When IndexColumn is not found, returns (-1, nil).
+func FindIndexColumnByName(indexCols []*IndexColumn, nameL string) (int, *IndexColumn) {
+	for i, ic := range indexCols {
+		if ic.Name.L == nameL {
+			return i, ic
+		}
+	}
+	return -1, nil
 }
 
 // ConstraintInfo provides meta data describing check-expression constraint.
@@ -1075,16 +1374,119 @@ func (t *TableInfo) FindConstraintInfoByName(constrName string) *ConstraintInfo 
 	return nil
 }
 
+// FindIndexNameByID finds index name by id.
+func (t *TableInfo) FindIndexNameByID(id int64) string {
+	indexInfo := FindIndexInfoByID(t.Indices, id)
+	if indexInfo != nil {
+		return indexInfo.Name.L
+	}
+	return ""
+}
+
+// FindColumnNameByID finds column name by id.
+func (t *TableInfo) FindColumnNameByID(id int64) string {
+	colInfo := FindColumnInfoByID(t.Columns, id)
+	if colInfo != nil {
+		return colInfo.Name.L
+	}
+	return ""
+}
+
 // FKInfo provides meta data describing a foreign key constraint.
 type FKInfo struct {
-	ID       int64       `json:"id"`
-	Name     CIStr       `json:"fk_name"`
-	RefTable CIStr       `json:"ref_table"`
-	RefCols  []CIStr     `json:"ref_cols"`
-	Cols     []CIStr     `json:"cols"`
-	OnDelete int         `json:"on_delete"`
-	OnUpdate int         `json:"on_update"`
-	State    SchemaState `json:"state"`
+	ID        int64       `json:"id"`
+	Name      CIStr       `json:"fk_name"`
+	RefSchema CIStr       `json:"ref_schema"`
+	RefTable  CIStr       `json:"ref_table"`
+	RefCols   []CIStr     `json:"ref_cols"`
+	Cols      []CIStr     `json:"cols"`
+	OnDelete  int         `json:"on_delete"`
+	OnUpdate  int         `json:"on_update"`
+	State     SchemaState `json:"state"`
+	Version   int         `json:"version"`
+}
+
+const (
+	// FKVersion0 indicate the FKInfo version is 0.
+	// In FKVersion0, TiDB only supported syntax of foreign key, but the foreign key constraint doesn't take effect.
+	FKVersion0 = 0
+	// FKVersion1 indicate the FKInfo version is 1.
+	// In FKVersion1, TiDB supports the foreign key constraint.
+	FKVersion1 = 1
+)
+
+// ReferredFKInfo provides the cited foreign key in the child table.
+type ReferredFKInfo struct {
+	Cols        []CIStr `json:"cols"`
+	ChildSchema CIStr   `json:"child_schema"`
+	ChildTable  CIStr   `json:"child_table"`
+	ChildFKName CIStr   `json:"child_fk_name"`
+}
+
+// ReferOptionType is the type for refer options.
+type ReferOptionType int
+
+// Refer option types.
+const (
+	ReferOptionNoOption ReferOptionType = iota
+	ReferOptionRestrict
+	ReferOptionCascade
+	ReferOptionSetNull
+	ReferOptionNoAction
+	ReferOptionSetDefault
+)
+
+// String implements fmt.Stringer interface.
+func (r ReferOptionType) String() string {
+	switch r {
+	case ReferOptionRestrict:
+		return "RESTRICT"
+	case ReferOptionCascade:
+		return "CASCADE"
+	case ReferOptionSetNull:
+		return "SET NULL"
+	case ReferOptionNoAction:
+		return "NO ACTION"
+	case ReferOptionSetDefault:
+		return "SET DEFAULT"
+	}
+	return ""
+}
+
+func (fk *FKInfo) String(db, tb string) string {
+	buf := bytes.Buffer{}
+	buf.WriteString("`" + db + "`.`")
+	buf.WriteString(tb + "`, CONSTRAINT `")
+	buf.WriteString(fk.Name.O + "` FOREIGN KEY (")
+	for i, col := range fk.Cols {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString("`" + col.O + "`")
+	}
+	buf.WriteString(") REFERENCES `")
+	if fk.RefSchema.L != db {
+		buf.WriteString(fk.RefSchema.L)
+		buf.WriteString("`.`")
+	}
+	buf.WriteString(fk.RefTable.L)
+	buf.WriteString("` (")
+	for i, col := range fk.RefCols {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString("`" + col.O + "`")
+	}
+	buf.WriteString(")")
+	if onDelete := ReferOptionType(fk.OnDelete); onDelete != ReferOptionNoOption {
+		buf.WriteString(" ON DELETE ")
+		buf.WriteString(onDelete.String())
+	}
+	if onUpdate := ReferOptionType(fk.OnUpdate); onUpdate != ReferOptionNoOption {
+		buf.WriteString(" ON UPDATE ")
+		buf.WriteString(onUpdate.String())
+	}
+	return buf.String()
 }
 
 // Clone clones FKInfo.
@@ -1128,6 +1530,11 @@ func (db *DBInfo) Copy() *DBInfo {
 	return &newInfo
 }
 
+// LessDBInfo is used for sorting DBInfo by DBInfo.Name.
+func LessDBInfo(a *DBInfo, b *DBInfo) bool {
+	return a.Name.L < b.Name.L
+}
+
 // CIStr is case insensitive string.
 type CIStr struct {
 	O string `json:"O"` // Original string.
@@ -1165,6 +1572,22 @@ func (cis *CIStr) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// MemoryUsage return the memory usage of CIStr
+func (cis *CIStr) MemoryUsage() (sum int64) {
+	if cis == nil {
+		return
+	}
+
+	return int64(unsafe.Sizeof(cis.O))*2 + int64(len(cis.O)+len(cis.L))
+}
+
+// TableItemID is composed by table ID and column/index ID
+type TableItemID struct {
+	TableID int64
+	ID      int64
+	IsIndex bool
+}
+
 // TableColumnID is composed by table ID and column ID.
 type TableColumnID struct {
 	TableID  int64
@@ -1200,6 +1623,28 @@ type PolicyInfo struct {
 	State SchemaState `json:"state"`
 }
 
+// Clone clones PolicyInfo.
+func (p *PolicyInfo) Clone() *PolicyInfo {
+	cloned := *p
+	cloned.PlacementSettings = p.PlacementSettings.Clone()
+	return &cloned
+}
+
+// TTLInfo records the TTL config
+type TTLInfo struct {
+	ColumnName      CIStr  `json:"column"`
+	IntervalExprStr string `json:"interval_expr"`
+	// `IntervalTimeUnit` is actually ast.TimeUnitType. Use `int` to avoid cycle dependency
+	IntervalTimeUnit int  `json:"interval_time_unit"`
+	Enable           bool `json:"enable"`
+}
+
+// Clone clones TTLInfo
+func (t *TTLInfo) Clone() *TTLInfo {
+	cloned := *t
+	return &cloned
+}
+
 func writeSettingItemToBuilder(sb *strings.Builder, item string) {
 	if sb.Len() != 0 {
 		sb.WriteString(" ")
@@ -1207,53 +1652,66 @@ func writeSettingItemToBuilder(sb *strings.Builder, item string) {
 	sb.WriteString(item)
 }
 
+func writeSettingStringToBuilder(sb *strings.Builder, item string, value string) {
+	writeSettingItemToBuilder(sb, fmt.Sprintf("%s=\"%s\"", item, strings.ReplaceAll(value, "\"", "\\\"")))
+}
+func writeSettingIntegerToBuilder(sb *strings.Builder, item string, value uint64) {
+	writeSettingItemToBuilder(sb, fmt.Sprintf("%s=%d", item, value))
+}
+
 func (p *PlacementSettings) String() string {
 	sb := new(strings.Builder)
 	if len(p.PrimaryRegion) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("PRIMARY_REGION=\"%s\"", p.PrimaryRegion))
+		writeSettingStringToBuilder(sb, "PRIMARY_REGION", p.PrimaryRegion)
 	}
 
 	if len(p.Regions) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("REGIONS=\"%s\"", p.Regions))
+		writeSettingStringToBuilder(sb, "REGIONS", p.Regions)
 	}
 
 	if len(p.Schedule) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("SCHEDULE=\"%s\"", p.Schedule))
+		writeSettingStringToBuilder(sb, "SCHEDULE", p.Schedule)
 	}
 
 	if len(p.Constraints) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("CONSTRAINTS=\"%s\"", p.Constraints))
+		writeSettingStringToBuilder(sb, "CONSTRAINTS", p.Constraints)
 	}
 
 	if len(p.LeaderConstraints) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("LEADER_CONSTRAINTS=\"%s\"", p.LeaderConstraints))
+		writeSettingStringToBuilder(sb, "LEADER_CONSTRAINTS", p.LeaderConstraints)
 	}
 
 	if p.Voters > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("VOTERS=%d", p.Voters))
+		writeSettingIntegerToBuilder(sb, "VOTERS", p.Voters)
 	}
 
 	if len(p.VoterConstraints) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("VOTER_CONSTRAINTS=\"%s\"", p.VoterConstraints))
+		writeSettingStringToBuilder(sb, "VOTER_CONSTRAINTS", p.VoterConstraints)
 	}
 
 	if p.Followers > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("FOLLOWERS=%d", p.Followers))
+		writeSettingIntegerToBuilder(sb, "FOLLOWERS", p.Followers)
 	}
 
 	if len(p.FollowerConstraints) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("FOLLOWER_CONSTRAINTS=\"%s\"", p.FollowerConstraints))
+		writeSettingStringToBuilder(sb, "FOLLOWER_CONSTRAINTS", p.FollowerConstraints)
 	}
 
 	if p.Learners > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("LEARNERS=%d", p.Learners))
+		writeSettingIntegerToBuilder(sb, "LEARNERS", p.Learners)
 	}
 
 	if len(p.LearnerConstraints) > 0 {
-		writeSettingItemToBuilder(sb, fmt.Sprintf("LEARNER_CONSTRAINTS=\"%s\"", p.LearnerConstraints))
+		writeSettingStringToBuilder(sb, "LEARNER_CONSTRAINTS", p.LearnerConstraints)
 	}
 
 	return sb.String()
+}
+
+// Clone clones the placement settings.
+func (p *PlacementSettings) Clone() *PlacementSettings {
+	cloned := *p
+	return &cloned
 }
 
 type StatsOptions struct {

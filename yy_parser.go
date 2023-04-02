@@ -53,6 +53,8 @@ var (
 	ErrUnknownAlterAlgorithm = terror.ClassParser.NewStd(mysql.ErrUnknownAlterAlgorithm)
 	// ErrWrongValue returns for wrong value
 	ErrWrongValue = terror.ClassParser.NewStd(mysql.ErrWrongValue)
+	// ErrWarnDeprecatedSyntax return when the syntax was deprecated
+	ErrWarnDeprecatedSyntax = terror.ClassParser.NewStd(mysql.ErrWarnDeprecatedSyntax)
 	// ErrWarnDeprecatedSyntaxNoReplacement return when the syntax was deprecated and there is no replacement.
 	ErrWarnDeprecatedSyntaxNoReplacement = terror.ClassParser.NewStd(mysql.ErrWarnDeprecatedSyntaxNoReplacement)
 	// ErrWarnDeprecatedIntegerDisplayWidth share the same code 1681, and it will be returned when length is specified in integer.
@@ -154,8 +156,7 @@ func (parser *Parser) ParseSQL(sql string, params ...ParseParam) (stmt []ast.Stm
 	parser.src = sql
 	parser.result = parser.result[:0]
 
-	var l yyLexer
-	l = &parser.lexer
+	var l yyLexer = &parser.lexer
 	yyParse(l, parser)
 
 	warns, errs := l.Errors()
@@ -194,7 +195,6 @@ func (parser *Parser) ParseOneStmt(sql, charset, collation string) (ast.StmtNode
 		return nil, ErrSyntax
 	}
 	ast.SetFlag(stmts[0])
-
 	return stmts[0], nil
 }
 
@@ -342,8 +342,9 @@ func getInt64FromNUM(num interface{}) (val int64, errMsg string) {
 	switch v := num.(type) {
 	case int64:
 		return v, ""
+	default:
+		return -1, fmt.Sprintf("%d is out of range [–9223372036854775808,9223372036854775807]", num)
 	}
-	return -1, fmt.Sprintf("%d is out of range [–9223372036854775808,9223372036854775807]", num)
 }
 
 func isRevokeAllGrant(roleOrPrivList []*ast.RoleOrPriv) bool {

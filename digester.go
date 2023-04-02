@@ -386,7 +386,7 @@ func (d *sqlDigester) isLit(t token) (beLit bool) {
 	return
 }
 
-func (d *sqlDigester) isNumLit(tok int) (beNum bool) {
+func (*sqlDigester) isNumLit(tok int) (beNum bool) {
 	switch tok {
 	case intLit, decLit, floatLit, hexLit:
 		beNum = true
@@ -395,7 +395,7 @@ func (d *sqlDigester) isNumLit(tok int) (beNum bool) {
 	return
 }
 
-func (d *sqlDigester) isComma(tok token) (isComma bool) {
+func (*sqlDigester) isComma(tok token) (isComma bool) {
 	isComma = tok.lit == ","
 	return
 }

@@ -101,7 +101,10 @@ func newCode2ErrClassMap() *code2ErrClassMap {
 
 func (m *code2ErrClassMap) Get(key string) (ErrClass, bool) {
 	ret, have := m.data.Load(key)
-	return ret.(ErrClass), have
+	if !have {
+		return ErrClass(-1), false
+	}
+	return ret.(ErrClass), true
 }
 
 func (m *code2ErrClassMap) Put(key string, err ErrClass) {
@@ -225,12 +228,12 @@ func getMySQLErrorCode(e *Error) uint16 {
 	rfcCode := e.RFCCode()
 	var class ErrClass
 	if index := strings.Index(string(rfcCode), ":"); index > 0 {
-		if ec, has := rfcCode2errClass.Get(string(rfcCode)[:index]); has {
-			class = ec
-		} else {
+		ec, has := rfcCode2errClass.Get(string(rfcCode)[:index])
+		if !has {
 			log.Warn("Unknown error class", zap.String("class", string(rfcCode)[:index]))
 			return defaultMySQLErrorCode
 		}
+		class = ec
 	}
 	codeMap, ok := ErrClassToMySQLCodes[class]
 	if !ok {
