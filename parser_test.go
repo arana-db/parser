@@ -4312,7 +4312,7 @@ func TestOptimizerHints(t *testing.T) {
 
 	// Test NO_SEMIJOIN
 	sourceSql = "SELECT /*+ NO_SEMIJOIN(@subq1 FIRSTMATCH, LOOSESCAN) */ * FROM t2\n  WHERE t2.a IN (SELECT /*+ QB_NAME(subq1) */ a FROM t3)"
-	restoreSql = "SELECT /*+ NO_SEMIJOIN(@`subq1`  FIRSTMATCH, LOOSESCAN)*/ * FROM `t2` WHERE `t2`.`a` IN (SELECT /*+ QB_NAME(`subq1`)*/ `a` FROM `t3`)"
+	restoreSql = "SELECT /*+ NO_SEMIJOIN(@`subq1` FIRSTMATCH, LOOSESCAN)*/ * FROM `t2` WHERE `t2`.`a` IN (SELECT /*+ QB_NAME(`subq1`)*/ `a` FROM `t3`)"
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
@@ -4324,7 +4324,7 @@ func TestOptimizerHints(t *testing.T) {
 
 	// Test SUBQUERY
 	sourceSql = "SELECT /*+ SUBQUERY(MATERIALIZATION) */ a FROM t1"
-	restoreSql = "SELECT /*+ SUBQUERY( MATERIALIZATION)*/ `a` FROM `t1`"
+	restoreSql = "SELECT /*+ SUBQUERY(MATERIALIZATION)*/ `a` FROM `t1`"
 	stmt, _, err = p.Parse(sourceSql, "", "")
 	require.NoError(t, err)
 	selectStmt = stmt[0].(*ast.SelectStmt)
