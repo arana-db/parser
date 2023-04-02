@@ -3755,6 +3755,7 @@ func TestErrorMsg(t *testing.T) {
 }
 
 func TestOptimizerHints(t *testing.T) {
+	sb := strings.Builder{}
 	p := parser.New()
 	// Test USE_INDEX
 	stmt, _, err := p.Parse("select /*+ USE_INDEX(T1,T2), use_index(t3,t4) */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
@@ -4221,6 +4222,118 @@ func TestOptimizerHints(t *testing.T) {
 	require.Len(t, hints, 2)
 	require.Equal(t, "limit_to_cop", hints[0].HintName.L)
 	require.Equal(t, "limit_to_cop", hints[1].HintName.L)
+
+	// Test JOIN_PREFIX JOIN_ORDER JOIN_SUFFIX
+	sourceSql := "SELECT/*+ JOIN_PREFIX(t2, t5@subq2, t4@subq1) JOIN_ORDER(t4@subq1, t3) JOIN_SUFFIX(t1) */COUNT(*) FROM t1 JOIN t2 JOIN t3 WHERE t1.f1 IN (SELECT /*+ QB_NAME(subq1) */ f1 FROM t4)AND t2.f1 IN (SELECT /*+ QB_NAME(subq2) */ f1 FROM t5)"
+	restoreSql := "SELECT /*+ JOIN_PREFIX(`t2`, `t5`@`subq2`, `t4`@`subq1`) JOIN_ORDER(`t4`@`subq1`, `t3`) JOIN_SUFFIX(`t1`)*/ COUNT(1) FROM (`t1` JOIN `t2`) JOIN `t3` WHERE `t1`.`f1` IN (SELECT /*+ QB_NAME(`subq1`)*/ `f1` FROM `t4`) AND `t2`.`f1` IN (SELECT /*+ QB_NAME(`subq2`)*/ `f1` FROM `t5`)"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 3)
+	require.Equal(t, "join_prefix", hints[0].HintName.L)
+	require.Equal(t, "join_order", hints[1].HintName.L)
+	require.Equal(t, "join_suffix", hints[2].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test MAX_EXECUTION_TIME
+	sourceSql = "SELECT /*+ MAX_EXECUTION_TIME(1000) */ * FROM t1 INNER JOIN t2 WHERE t1.c1 = t2.c1"
+	restoreSql = "SELECT /*+ MAX_EXECUTION_TIME(1000)*/ * FROM `t1` JOIN `t2` WHERE `t1`.`c1`=`t2`.`c1`"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "max_execution_time", hints[0].HintName.L)
+	require.Equal(t, uint64(1000), hints[0].HintData.(uint64))
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test NO_MERGE
+	sourceSql = "SELECT /*+ NO_MERGE(dt) */ * FROM (SELECT * FROM t1) AS dt"
+	restoreSql = "SELECT /*+ NO_MERGE(`dt`)*/ * FROM (SELECT * FROM `t1`) AS `dt`"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "no_merge", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test MRR
+	sourceSql = "SELECT /*+ MRR(t1) */ * FROM t1 WHERE f2 <= 3 AND 3 <= f3"
+	restoreSql = "SELECT /*+ MRR(`t1`)*/ * FROM `t1` WHERE `f2`<=3 AND 3<=`f3`"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "mrr", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test NO_RANGE_OPTIMIZATION
+	sourceSql = "SELECT /*+ NO_RANGE_OPTIMIZATION(t3 PRIMARY, f2_idx) */ f1 FROM t3 WHERE f1 > 30 AND f1 < 33"
+	restoreSql = "SELECT /*+ NO_RANGE_OPTIMIZATION(`t3` `PRIMARY`, `f2_idx`)*/ `f1` FROM `t3` WHERE `f1`>30 AND `f1`<33"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "no_range_optimization", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test NO_ICP
+	sourceSql = "SELECT /*+ NO_ICP(t2) */ t2.f1, t2.f2, t2.f3 FROM t1,t2 WHERE t1.f1=t2.f1 AND t2.f2 BETWEEN t1.f1 AND t1.f2 AND t2.f2 + 1 >= t1.f1 + 1"
+	restoreSql = "SELECT /*+ NO_ICP(`t2`)*/ `t2`.`f1`,`t2`.`f2`,`t2`.`f3` FROM (`t1`) JOIN `t2` WHERE `t1`.`f1`=`t2`.`f1` AND `t2`.`f2` BETWEEN `t1`.`f1` AND `t1`.`f2` AND `t2`.`f2`+1>=`t1`.`f1`+1"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "no_icp", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test SKIP_SCAN
+	sourceSql = "SELECT /*+ SKIP_SCAN(t1 PRIMARY) */ f1, f2  FROM t1 WHERE f2 > 40"
+	restoreSql = "SELECT /*+ SKIP_SCAN(`t1` `PRIMARY`)*/ `f1`,`f2` FROM `t1` WHERE `f2`>40"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "skip_scan", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test NO_SEMIJOIN
+	sourceSql = "SELECT /*+ NO_SEMIJOIN(@subq1 FIRSTMATCH, LOOSESCAN) */ * FROM t2\n  WHERE t2.a IN (SELECT /*+ QB_NAME(subq1) */ a FROM t3)"
+	restoreSql = "SELECT /*+ NO_SEMIJOIN(@`subq1`  FIRSTMATCH, LOOSESCAN)*/ * FROM `t2` WHERE `t2`.`a` IN (SELECT /*+ QB_NAME(`subq1`)*/ `a` FROM `t3`)"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "no_semijoin", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
+	// Test SUBQUERY
+	sourceSql = "SELECT /*+ SUBQUERY(MATERIALIZATION) */ a FROM t1"
+	restoreSql = "SELECT /*+ SUBQUERY( MATERIALIZATION)*/ `a` FROM `t1`"
+	stmt, _, err = p.Parse(sourceSql, "", "")
+	require.NoError(t, err)
+	selectStmt = stmt[0].(*ast.SelectStmt)
+	sb.Reset()
+	hints = selectStmt.TableHints
+	require.Len(t, hints, 1)
+	require.Equal(t, "subquery", hints[0].HintName.L)
+	RunRestoreTest(t, sourceSql, restoreSql, false)
+
 }
 
 func TestType(t *testing.T) {

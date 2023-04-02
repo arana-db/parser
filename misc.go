@@ -912,6 +912,9 @@ var hintTokenMap = map[string]int{
 	"SET_VAR":               hintSetVar,
 	"RESOURCE_GROUP":        hintResourceGroup,
 	"QB_NAME":               hintQBName,
+	"ORDER_INDEX":           hintOrderIndex,
+	"NO_ORDER_INDEX":        hintNoOrderIndex,
+	"SUBQUERY":              hintSubQuery,
 
 	// TiDB hint names
 	"AGG_TO_COP":              hintAggToCop,
@@ -960,6 +963,7 @@ var hintTokenMap = map[string]int{
 	"FIRSTMATCH":      hintFirstMatch,
 	"LOOSESCAN":       hintLooseScan,
 	"MATERIALIZATION": hintMaterialization,
+	"INTOEXISTS":      hintIntoExist,
 }
 
 func (s *Scanner) isTokenIdentifier(lit string, offset int) int {
