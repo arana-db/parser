@@ -52,32 +52,43 @@ import (
 	hintStringLit
 
 	/* MySQL 8.0 hint names */
-	hintJoinFixedOrder      "JOIN_FIXED_ORDER"
-	hintJoinOrder           "JOIN_ORDER"
-	hintJoinPrefix          "JOIN_PREFIX"
-	hintJoinSuffix          "JOIN_SUFFIX"
-	hintBKA                 "BKA"
-	hintNoBKA               "NO_BKA"
-	hintBNL                 "BNL"
-	hintNoBNL               "NO_BNL"
-	hintHashJoin            "HASH_JOIN"
-	hintNoHashJoin          "NO_HASH_JOIN"
-	hintMerge               "MERGE"
-	hintNoMerge             "NO_MERGE"
-	hintIndexMerge          "INDEX_MERGE"
-	hintNoIndexMerge        "NO_INDEX_MERGE"
-	hintMRR                 "MRR"
-	hintNoMRR               "NO_MRR"
-	hintNoICP               "NO_ICP"
-	hintNoRangeOptimization "NO_RANGE_OPTIMIZATION"
-	hintSkipScan            "SKIP_SCAN"
-	hintNoSkipScan          "NO_SKIP_SCAN"
-	hintSemijoin            "SEMIJOIN"
-	hintNoSemijoin          "NO_SEMIJOIN"
-	hintMaxExecutionTime    "MAX_EXECUTION_TIME"
-	hintSetVar              "SET_VAR"
-	hintResourceGroup       "RESOURCE_GROUP"
-	hintQBName              "QB_NAME"
+	hintJoinFixedOrder             "JOIN_FIXED_ORDER"
+	hintJoinOrder                  "JOIN_ORDER"
+	hintJoinPrefix                 "JOIN_PREFIX"
+	hintJoinSuffix                 "JOIN_SUFFIX"
+	hintBKA                        "BKA"
+	hintNoBKA                      "NO_BKA"
+	hintBNL                        "BNL"
+	hintNoBNL                      "NO_BNL"
+	hintHashJoin                   "HASH_JOIN"
+	hintNoHashJoin                 "NO_HASH_JOIN"
+	hintMerge                      "MERGE"
+	hintNoMerge                    "NO_MERGE"
+	hintIndexMerge                 "INDEX_MERGE"
+	hintNoIndexMerge               "NO_INDEX_MERGE"
+	hintMRR                        "MRR"
+	hintNoMRR                      "NO_MRR"
+	hintNoICP                      "NO_ICP"
+	hintNoRangeOptimization        "NO_RANGE_OPTIMIZATION"
+	hintSkipScan                   "SKIP_SCAN"
+	hintNoSkipScan                 "NO_SKIP_SCAN"
+	hintSemijoin                   "SEMIJOIN"
+	hintNoSemijoin                 "NO_SEMIJOIN"
+	hintMaxExecutionTime           "MAX_EXECUTION_TIME"
+	hintSetVar                     "SET_VAR"
+	hintResourceGroup              "RESOURCE_GROUP"
+	hintQBName                     "QB_NAME"
+	hintDerivedConditionPushdown   "DERIVED_CONDITION_PUSHDOWN"
+	hintNoDerivedConditionPushdown "NO_DERIVED_CONDITION_PUSHDOWN"
+	hintGroupIndex                 "GROUP_INDEX"
+	hintNoGroupIndex               "NO_GROUP_INDEX"
+	hintIndex                      "INDEX"
+	hintNoIndex                    "NO_INDEX"
+	hintJoinIndex                  "JOIN_INDEX"
+	hintNoJoinIndex                "NO_JOIN_INDEX"
+	hintOrderIndex                 "ORDER_INDEX"
+	hintNoOrderIndex               "NO_ORDER_INDEX"
+	hintSubQuery                   "SUBQUERY"
 
 	/* TiDB hint names */
 	hintAggToCop              "AGG_TO_COP"
@@ -121,6 +132,7 @@ import (
 	hintFirstMatch      "FIRSTMATCH"
 	hintLooseScan       "LOOSESCAN"
 	hintMaterialization "MATERIALIZATION"
+	hintIntoExist       "INTOEXISTS"
 
 %type	<ident>
 	Identifier                             "identifier (including keywords)"
@@ -154,8 +166,6 @@ import (
 	HintIndexList           "table name with index list in optimizer hint"
 	IndexNameList           "index list in optimizer hint"
 	IndexNameListOpt        "optional index list in optimizer hint"
-	SubqueryStrategies      "subquery strategies"
-	SubqueryStrategiesOpt   "optional subquery strategies"
 	HintTrueOrFalse         "true or false in optimizer hint"
 	HintStorageTypeAndTable "storage type and tables in optimizer hint"
 
@@ -163,8 +173,10 @@ import (
 	HintTable "Table in optimizer hint"
 
 %type	<modelIdents>
-	PartitionList    "partition name list in optimizer hint"
-	PartitionListOpt "optional partition name list in optimizer hint"
+	PartitionList         "partition name list in optimizer hint"
+	PartitionListOpt      "optional partition name list in optimizer hint"
+	SubqueryStrategies    "subquery strategies"
+	SubqueryStrategiesOpt "optional subquery strategies"
 
 
 %start	Start
@@ -209,8 +221,9 @@ TableOptimizerHintOpt:
 	}
 |	JoinOrderOptimizerHintName '(' HintTableList ')'
 	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
+		h := $3
+		h.HintName = model.NewCIStr($1)
+		$$ = h
 	}
 |	UnsupportedTableLevelOptimizerHintName '(' HintTableListOpt ')'
 	{
@@ -236,8 +249,11 @@ TableOptimizerHintOpt:
 	}
 |	SubqueryOptimizerHintName '(' QueryBlockOpt SubqueryStrategiesOpt ')'
 	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
+		$$ = &ast.TableOptimizerHint{
+			HintName: model.NewCIStr($1),
+			QBName:   model.NewCIStr($3),
+			HintData: $4,
+		}
 	}
 |	"MAX_EXECUTION_TIME" '(' QueryBlockOpt hintIntLit ')'
 	{
@@ -267,8 +283,10 @@ TableOptimizerHintOpt:
 	}
 |	"RESOURCE_GROUP" '(' Identifier ')'
 	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
+		$$ = &ast.TableOptimizerHint{
+			HintName: model.NewCIStr($1),
+			HintData: model.NewCIStr($3),
+		}
 	}
 |	"QB_NAME" '(' Identifier ')'
 	{
@@ -480,13 +498,20 @@ IndexNameList:
  */
 SubqueryStrategiesOpt:
 	/* empty */
-	{}
+	{
+		$$ = []model.CIStr{}
+	}
 |	SubqueryStrategies
 
 SubqueryStrategies:
 	SubqueryStrategy
-	{}
-|	SubqueryStrategies ',' SubqueryStrategy
+	{
+		$$ = []model.CIStr{model.NewCIStr($1)}
+	}
+|	SubqueryStrategies CommaOpt SubqueryStrategy
+	{
+		$$ = append($1, model.NewCIStr($3))
+	}
 
 Value:
 	hintStringLit
@@ -528,8 +553,6 @@ UnsupportedTableLevelOptimizerHintName:
 |	"NO_BNL"
 /* HASH_JOIN is supported by TiDB */
 |	"NO_HASH_JOIN"
-|	"MERGE"
-|	"NO_MERGE"
 
 SupportedTableLevelOptimizerHintName:
 	"MERGE_JOIN"
@@ -541,32 +564,39 @@ SupportedTableLevelOptimizerHintName:
 |	"NO_SWAP_JOIN_INPUTS"
 |	"INL_MERGE_JOIN"
 |	"HASH_JOIN"
+|	"MERGE"
+|	"NO_MERGE"
 
 UnsupportedIndexLevelOptimizerHintName:
 	"INDEX_MERGE"
-/* NO_INDEX_MERGE is currently a nullary hint in TiDB */
-|	"MRR"
-|	"NO_MRR"
-|	"NO_ICP"
-|	"NO_RANGE_OPTIMIZATION"
-|	"SKIP_SCAN"
-|	"NO_SKIP_SCAN"
 
 SupportedIndexLevelOptimizerHintName:
 	"USE_INDEX"
 |	"IGNORE_INDEX"
 |	"USE_INDEX_MERGE"
+|	"GROUP_INDEX"
 |	"FORCE_INDEX"
+|	"ORDER_INDEX"
+|	"NO_ORDER_INDEX"
+|	"SKIP_SCAN"
+|	"NO_SKIP_SCAN"
+|	"MRR"
+|	"NO_MRR"
+|	"NO_ICP"
+|	"NO_RANGE_OPTIMIZATION"
 
 SubqueryOptimizerHintName:
 	"SEMIJOIN"
 |	"NO_SEMIJOIN"
+/*For SUBQUERY hints, permitted strategy values are different to SEMIJOIN and NO_SEMIJOIN, but not limit strictly here*/
+|	"SUBQUERY"
 
 SubqueryStrategy:
 	"DUPSWEEDOUT"
 |	"FIRSTMATCH"
 |	"LOOSESCAN"
 |	"MATERIALIZATION"
+|	"INTOEXISTS"
 
 BooleanHintName:
 	"USE_TOJA"
@@ -659,4 +689,5 @@ Identifier:
 |	"FIRSTMATCH"
 |	"LOOSESCAN"
 |	"MATERIALIZATION"
+|	"INTOEXISTS"
 %%

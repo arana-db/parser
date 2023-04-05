@@ -14,13 +14,13 @@
 package parser_test
 
 import (
+	"github.com/arana-db/parser/model"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/arana-db/parser"
 	"github.com/arana-db/parser/ast"
-	"github.com/arana-db/parser/model"
 	"github.com/arana-db/parser/mysql"
 )
 
@@ -337,6 +337,417 @@ func TestParseHint(t *testing.T) {
 						From: "2020-02-20 12:12:12",
 						To:   "2020-02-20 13:12:12",
 					},
+				},
+			},
+		},
+		{
+			input: "JOIN_ORDER(@qb1 tbl1) JOIN_ORDER(@qb1 tbl1,tbl2) " +
+				"JOIN_ORDER(tbl1) JOIN_ORDER(tbl1@qb1) JOIN_ORDER(tbl1@qb1, tbl2@qb2)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("JOIN_ORDER"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_ORDER"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_ORDER"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_ORDER"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_ORDER"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		{
+			input: "JOIN_PREFIX(@qb1 tbl1) JOIN_PREFIX(@qb1 tbl1,tbl2) " +
+				"JOIN_PREFIX(tbl1) JOIN_PREFIX(tbl1@qb1) JOIN_PREFIX(tbl1@qb1, tbl2@qb2)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("JOIN_PREFIX"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_PREFIX"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_PREFIX"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_PREFIX"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_PREFIX"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		{
+			input: "JOIN_SUFFIX(@qb1 tbl1) JOIN_SUFFIX(@qb1 tbl1,tbl2) " +
+				"JOIN_SUFFIX(tbl1) JOIN_SUFFIX(tbl1@qb1) JOIN_SUFFIX(tbl1@qb1, tbl2@qb2)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("JOIN_SUFFIX"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_SUFFIX"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_SUFFIX"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_SUFFIX"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("JOIN_SUFFIX"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		{
+			input: "MAX_EXECUTION_TIME(1000)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("MAX_EXECUTION_TIME"),
+					HintData: uint64(1000),
+				},
+			},
+		},
+		// MERGE,NOMERGE
+		{
+			input: "MERGE() MERGE(@qb1) MERGE(@qb1 tbl1) MERGE(@qb1 tbl1,tbl2) " +
+				"MERGE(tbl1) MERGE(tbl1@qb1) MERGE(tbl1@qb1, tbl2@qb2)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("MERGE"),
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1")},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					QBName:   model.NewCIStr("qb1"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+						{TableName: model.NewCIStr("tbl2")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{TableName: model.NewCIStr("tbl1")},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+					},
+				},
+				{
+					HintName: model.NewCIStr("MERGE"),
+					Tables: []ast.HintTable{
+						{
+							TableName: model.NewCIStr("tbl1"),
+							QBName:    model.NewCIStr("qb1"),
+						},
+						{
+							TableName: model.NewCIStr("tbl2"),
+							QBName:    model.NewCIStr("qb2"),
+						},
+					},
+				},
+			},
+		},
+		// MRR, NOMRR
+		{
+			input: "MRR(t1) MRR(t1 idx1,idx2) MRR(@qb1 t1 idx1,idx2) MRR(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("MRR"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("MRR"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("MRR"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("MRR"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		{
+			input: "NO_ICP(t1) NO_ICP(t1 idx1,idx2) NO_ICP(@qb1 t1 idx1,idx2) NO_ICP(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		{
+			input: "NO_ICP(t1) NO_ICP(t1 idx1,idx2) NO_ICP(@qb1 t1 idx1,idx2) NO_ICP(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_ICP"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		{
+			input: "NO_RANGE_OPTIMIZATION(t1) NO_RANGE_OPTIMIZATION(t1 idx1,idx2) NO_RANGE_OPTIMIZATION(@qb1 t1 idx1,idx2)" +
+				"NO_RANGE_OPTIMIZATION(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("NO_RANGE_OPTIMIZATION"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("NO_RANGE_OPTIMIZATION"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_RANGE_OPTIMIZATION"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_RANGE_OPTIMIZATION"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		// ORDER_INDEX, NO_ORDER_INDEX
+		{
+			input: "ORDER_INDEX(t1) ORDER_INDEX(t1 idx1,idx2) NO_ORDER_INDEX(@qb1 t1 idx1,idx2) NO_ORDER_INDEX(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("ORDER_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("ORDER_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_ORDER_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_ORDER_INDEX"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		//NO_SEMIJOIN, SEMIJOIN
+		{
+			input: "NO_SEMIJOIN(@subq1 FIRSTMATCH, LOOSESCAN) SEMIJOIN(@subq1 MATERIALIZATION, DUPSWEEDOUT) SEMIJOIN()",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("NO_SEMIJOIN"),
+					QBName:   model.NewCIStr("subq1"),
+					HintData: []model.CIStr{model.NewCIStr("FIRSTMATCH"), model.NewCIStr("LOOSESCAN")},
+				},
+				{
+					HintName: model.NewCIStr("SEMIJOIN"),
+					QBName:   model.NewCIStr("subq1"),
+					HintData: []model.CIStr{model.NewCIStr("MATERIALIZATION"), model.NewCIStr("DUPSWEEDOUT")},
+				},
+				{
+					HintName: model.NewCIStr("SEMIJOIN"),
+					HintData: []model.CIStr{},
+				},
+			},
+		},
+		// SKIP_SCAN, NO_SKIP_SCAN
+		{
+			input: "SKIP_SCAN(t1) SKIP_SCAN(t1 idx1,idx2) NO_SKIP_SCAN(@qb1 t1 idx1,idx2) NO_SKIP_SCAN(t1@qb1 idx1,idx2) ",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("SKIP_SCAN"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+				},
+				{
+					HintName: model.NewCIStr("SKIP_SCAN"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+				{
+					HintName: model.NewCIStr("NO_SKIP_SCAN"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+					QBName:   model.NewCIStr("qb1"),
+				},
+				{
+					HintName: model.NewCIStr("NO_SKIP_SCAN"),
+					Tables:   []ast.HintTable{{TableName: model.NewCIStr("t1"), QBName: model.NewCIStr("qb1")}},
+					Indexes:  []model.CIStr{model.NewCIStr("idx1"), model.NewCIStr("idx2")},
+				},
+			},
+		},
+		{
+			input: "RESOURCE_GROUP(group_name)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("RESOURCE_GROUP"),
+					HintData: model.NewCIStr("group_name"),
+				},
+			},
+		},
+		// For SUBQUERY hints, these strategy values are permitted: INTOEXISTS, MATERIALIZATION.
+		{
+			input: "SUBQUERY(@subq1 MATERIALIZATION) SUBQUERY(@subq1 MATERIALIZATION, INTOEXISTS)",
+			output: []*ast.TableOptimizerHint{
+				{
+					HintName: model.NewCIStr("SUBQUERY"),
+					QBName:   model.NewCIStr("subq1"),
+					HintData: []model.CIStr{model.NewCIStr("MATERIALIZATION")},
+				},
+				{
+					HintName: model.NewCIStr("SUBQUERY"),
+					QBName:   model.NewCIStr("subq1"),
+					HintData: []model.CIStr{model.NewCIStr("MATERIALIZATION"), model.NewCIStr("INTOEXISTS")},
 				},
 			},
 		},
