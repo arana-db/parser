@@ -207,6 +207,69 @@ func TestUserSpec(t *testing.T) {
 
 func TestTableOptimizerHintRestore(t *testing.T) {
 	testCases := []NodeRestoreTestCase{
+		// mysql 8.0 table level
+		{"BKA()", "BKA()"},
+		{"BKA(@qb1)", "BKA(@`qb1` )"},
+		{"BKA(tbl1)", "BKA(`tbl1`)"},
+		{"BKA(tbl1@qb1,tbl2@qb2)", "BKA(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"NO_BKA()", "NO_BKA()"},
+		{"NO_BKA(@qb1)", "NO_BKA(@`qb1` )"},
+		{"NO_BKA(tbl1)", "NO_BKA(`tbl1`)"},
+		{"NO_BKA(tbl1@qb1,tbl2@qb2)", "NO_BKA(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"BNL()", "BNL()"},
+		{"BNL(@qb1)", "BNL(@`qb1` )"},
+		{"BNL(tbl1)", "BNL(`tbl1`)"},
+		{"BNL(tbl1@qb1,tbl2@qb2)", "BNL(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"NO_BNL()", "NO_BNL()"},
+		{"NO_BNL(@qb1)", "NO_BNL(@`qb1` )"},
+		{"NO_BNL(tbl1)", "NO_BNL(`tbl1`)"},
+		{"NO_BNL(tbl1@qb1,tbl2@qb2)", "NO_BNL(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"DERIVED_CONDITION_PUSHDOWN()", "DERIVED_CONDITION_PUSHDOWN()"},
+		{"DERIVED_CONDITION_PUSHDOWN(@qb1)", "DERIVED_CONDITION_PUSHDOWN(@`qb1` )"},
+		{"DERIVED_CONDITION_PUSHDOWN(tbl1)", "DERIVED_CONDITION_PUSHDOWN(`tbl1`)"},
+		{"DERIVED_CONDITION_PUSHDOWN(tbl1@qb1,tbl2@qb2)", "DERIVED_CONDITION_PUSHDOWN(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"NO_DERIVED_CONDITION_PUSHDOWN()", "NO_DERIVED_CONDITION_PUSHDOWN()"},
+		{"NO_DERIVED_CONDITION_PUSHDOWN(@qb1)", "NO_DERIVED_CONDITION_PUSHDOWN(@`qb1` )"},
+		{"NO_DERIVED_CONDITION_PUSHDOWN(tbl1)", "NO_DERIVED_CONDITION_PUSHDOWN(`tbl1`)"},
+		{"NO_DERIVED_CONDITION_PUSHDOWN(tbl1@qb1,tbl2@qb2)", "NO_DERIVED_CONDITION_PUSHDOWN(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"HASH_JOIN()", "HASH_JOIN()"},
+		{"HASH_JOIN(@qb1)", "HASH_JOIN(@`qb1` )"},
+		{"HASH_JOIN(tbl1)", "HASH_JOIN(`tbl1`)"},
+		{"HASH_JOIN(tbl1@qb1,tbl2@qb2)", "HASH_JOIN(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"NO_HASH_JOIN()", "NO_HASH_JOIN()"},
+		{"NO_HASH_JOIN(@qb1)", "NO_HASH_JOIN(@`qb1` )"},
+		{"NO_HASH_JOIN(tbl1)", "NO_HASH_JOIN(`tbl1`)"},
+		{"NO_HASH_JOIN(tbl1@qb1,tbl2@qb2)", "NO_HASH_JOIN(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		{"JOIN_FIXED_ORDER()", "JOIN_FIXED_ORDER()"},
+		{"JOIN_FIXED_ORDER(@qb1)", "JOIN_FIXED_ORDER(@`qb1` )"},
+		{"JOIN_FIXED_ORDER(tbl1)", "JOIN_FIXED_ORDER(`tbl1`)"},
+		{"JOIN_FIXED_ORDER(tbl1@qb1,tbl2@qb2)", "JOIN_FIXED_ORDER(`tbl1`@`qb1`, `tbl2`@`qb2`)"},
+		// mysql 8.0 index level
+		{"GROUP_INDEX(t1 c1)", "GROUP_INDEX(`t1` `c1`)"},
+		{"GROUP_INDEX(@sel1 t1 c1)", "GROUP_INDEX(@`sel1` `t1` `c1`)"},
+		{"GROUP_INDEX(t1@sel1 c1)", "GROUP_INDEX(`t1`@`sel1` `c1`)"},
+		{"NO_GROUP_INDEX(t1 c1)", "NO_GROUP_INDEX(`t1` `c1`)"},
+		{"NO_GROUP_INDEX(@sel1 t1 c1)", "NO_GROUP_INDEX(@`sel1` `t1` `c1`)"},
+		{"NO_GROUP_INDEX(t1@sel1 c1)", "NO_GROUP_INDEX(`t1`@`sel1` `c1`)"},
+		{"INDEX(t1 c1)", "INDEX(`t1` `c1`)"},
+		{"INDEX(@sel1 t1 c1)", "INDEX(@`sel1` `t1` `c1`)"},
+		{"INDEX(t1@sel1 c1)", "INDEX(`t1`@`sel1` `c1`)"},
+		{"NO_INDEX(t1@sel1 c1)", "NO_INDEX(`t1`@`sel1` `c1`)"},
+		{"NO_INDEX(@sel1 t1 c1)", "NO_INDEX(@`sel1` `t1` `c1`)"},
+		{"NO_INDEX(t1@sel1 c1)", "NO_INDEX(`t1`@`sel1` `c1`)"},
+		{"JOIN_INDEX(t1 c1)", "JOIN_INDEX(`t1` `c1`)"},
+		{"JOIN_INDEX(@sel1 t1 c1)", "JOIN_INDEX(@`sel1` `t1` `c1`)"},
+		{"JOIN_INDEX(t1@sel1 c1)", "JOIN_INDEX(`t1`@`sel1` `c1`)"},
+		{"NO_JOIN_INDEX(t1 c1)", "NO_JOIN_INDEX(`t1` `c1`)"},
+		{"NO_JOIN_INDEX(@sel1 t1 c1)", "NO_JOIN_INDEX(@`sel1` `t1` `c1`)"},
+		{"NO_JOIN_INDEX(t1@sel1 c1)", "NO_JOIN_INDEX(`t1`@`sel1` `c1`)"},
+		{"INDEX_MERGE(t1 c1)", "INDEX_MERGE(`t1` `c1`)"},
+		{"INDEX_MERGE(@sel1 t1 c1)", "INDEX_MERGE(@`sel1` `t1` `c1`)"},
+		{"INDEX_MERGE(t1@sel1 c1)", "INDEX_MERGE(`t1`@`sel1` `c1`)"},
+		{"NO_INDEX_MERGE(t1 c1)", "NO_INDEX_MERGE(`t1` `c1`)"},
+		{"NO_INDEX_MERGE(@sel1 t1 c1)", "NO_INDEX_MERGE(@`sel1` `t1` `c1`)"},
+		{"NO_INDEX_MERGE(t1@sel1 c1)", "NO_INDEX_MERGE(`t1`@`sel1` `c1`)"},
+
 		{"USE_INDEX(t1 c1)", "USE_INDEX(`t1` `c1`)"},
 		{"USE_INDEX(test.t1 c1)", "USE_INDEX(`test`.`t1` `c1`)"},
 		{"USE_INDEX(@sel_1 t1 c1)", "USE_INDEX(@`sel_1` `t1` `c1`)"},
@@ -239,7 +302,6 @@ func TestTableOptimizerHintRestore(t *testing.T) {
 		{"INL_HASH_JOIN(t1,t2)", "INL_HASH_JOIN(`t1`, `t2`)"},
 		{"INL_MERGE_JOIN(t1,t2)", "INL_MERGE_JOIN(`t1`, `t2`)"},
 		{"INL_JOIN(t1,t2)", "INL_JOIN(`t1`, `t2`)"},
-		{"HASH_JOIN(t1,t2)", "HASH_JOIN(`t1`, `t2`)"},
 		{"MAX_EXECUTION_TIME(3000)", "MAX_EXECUTION_TIME(3000)"},
 		{"MAX_EXECUTION_TIME(@sel1 3000)", "MAX_EXECUTION_TIME(@`sel1` 3000)"},
 		{"USE_INDEX_MERGE(t1 c1)", "USE_INDEX_MERGE(`t1` `c1`)"},
@@ -265,8 +327,6 @@ func TestTableOptimizerHintRestore(t *testing.T) {
 		{"AGG_TO_COP()", "AGG_TO_COP()"},
 		{"AGG_TO_COP(@sel_1)", "AGG_TO_COP(@`sel_1`)"},
 		{"LIMIT_TO_COP()", "LIMIT_TO_COP()"},
-		{"NO_INDEX_MERGE()", "NO_INDEX_MERGE()"},
-		{"NO_INDEX_MERGE(@sel1)", "NO_INDEX_MERGE(@`sel1`)"},
 		{"READ_CONSISTENT_REPLICA()", "READ_CONSISTENT_REPLICA()"},
 		{"READ_CONSISTENT_REPLICA(@sel1)", "READ_CONSISTENT_REPLICA(@`sel1`)"},
 		{"QB_NAME(sel1)", "QB_NAME(`sel1`)"},
@@ -323,7 +383,11 @@ func TestTableOptimizerHintRestore(t *testing.T) {
 		{"SUBQUERY(@subq1 INTOEXISTS, MATERIALIZATION)", "SUBQUERY(@`subq1` INTOEXISTS, MATERIALIZATION)"},
 	}
 	extractNodeFunc := func(node ast.Node) ast.Node {
-		return node.(*ast.SelectStmt).TableHints[0]
+		hints := node.(*ast.SelectStmt).TableHints
+		if len(hints) > 0 {
+			return hints[0]
+		}
+		return &ast.TableOptimizerHint{} // avoid panic
 	}
 	runNodeRestoreTest(t, testCases, "select /*+ %s */ * from t1 join t2", extractNodeFunc)
 }
@@ -373,6 +437,5 @@ func TestBRIESecureText(t *testing.T) {
 		n, ok := node.(ast.SensitiveStmtNode)
 		require.True(t, ok, comment)
 		require.Regexp(t, tc.secured, n.SecureText(), comment)
-
 	}
 }

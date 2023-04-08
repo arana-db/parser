@@ -135,20 +135,18 @@ import (
 	hintIntoExist       "INTOEXISTS"
 
 %type	<ident>
-	Identifier                             "identifier (including keywords)"
-	QueryBlockOpt                          "Query block identifier optional"
+	Identifier                           "identifier (including keywords)"
+	QueryBlockOpt                        "Query block identifier optional"
 	JoinOrderOptimizerHintName
-	UnsupportedTableLevelOptimizerHintName
 	SupportedTableLevelOptimizerHintName
-	UnsupportedIndexLevelOptimizerHintName
 	SupportedIndexLevelOptimizerHintName
 	SubqueryOptimizerHintName
-	BooleanHintName                        "name of hints which take a boolean input"
-	NullaryHintName                        "name of hints which take no input"
+	BooleanHintName                      "name of hints which take a boolean input"
+	NullaryHintName                      "name of hints which take no input"
 	SubqueryStrategy
-	Value                                  "the value in the SET_VAR() hint"
-	HintQueryType                          "query type in optimizer hint (OLAP or OLTP)"
-	HintStorageType                        "storage type in optimizer hint (TiKV or TiFlash)"
+	Value                                "the value in the SET_VAR() hint"
+	HintQueryType                        "query type in optimizer hint (OLAP or OLTP)"
+	HintStorageType                      "storage type in optimizer hint (TiKV or TiFlash)"
 
 %type	<number>
 	UnitOfBytes "unit of bytes (MB or GB)"
@@ -214,32 +212,17 @@ OptimizerHintList:
 	}
 
 TableOptimizerHintOpt:
-	"JOIN_FIXED_ORDER" '(' QueryBlockOpt ')'
-	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
-	}
-|	JoinOrderOptimizerHintName '(' HintTableList ')'
+	JoinOrderOptimizerHintName '(' HintTableList ')'
 	{
 		h := $3
 		h.HintName = model.NewCIStr($1)
 		$$ = h
-	}
-|	UnsupportedTableLevelOptimizerHintName '(' HintTableListOpt ')'
-	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
 	}
 |	SupportedTableLevelOptimizerHintName '(' HintTableListOpt ')'
 	{
 		h := $3
 		h.HintName = model.NewCIStr($1)
 		$$ = h
-	}
-|	UnsupportedIndexLevelOptimizerHintName '(' HintIndexList ')'
-	{
-		parser.warnUnsupportedHint($1)
-		$$ = nil
 	}
 |	SupportedIndexLevelOptimizerHintName '(' HintIndexList ')'
 	{
@@ -546,14 +529,6 @@ JoinOrderOptimizerHintName:
 |	"JOIN_PREFIX"
 |	"JOIN_SUFFIX"
 
-UnsupportedTableLevelOptimizerHintName:
-	"BKA"
-|	"NO_BKA"
-|	"BNL"
-|	"NO_BNL"
-/* HASH_JOIN is supported by TiDB */
-|	"NO_HASH_JOIN"
-
 SupportedTableLevelOptimizerHintName:
 	"MERGE_JOIN"
 |	"BROADCAST_JOIN"
@@ -566,9 +541,14 @@ SupportedTableLevelOptimizerHintName:
 |	"HASH_JOIN"
 |	"MERGE"
 |	"NO_MERGE"
-
-UnsupportedIndexLevelOptimizerHintName:
-	"INDEX_MERGE"
+|	"BKA"
+|	"NO_BKA"
+|	"JOIN_FIXED_ORDER"
+|	"BNL"
+|	"NO_BNL"
+|	"NO_HASH_JOIN"
+|	"DERIVED_CONDITION_PUSHDOWN"
+|	"NO_DERIVED_CONDITION_PUSHDOWN"
 
 SupportedIndexLevelOptimizerHintName:
 	"USE_INDEX"
@@ -584,6 +564,13 @@ SupportedIndexLevelOptimizerHintName:
 |	"NO_MRR"
 |	"NO_ICP"
 |	"NO_RANGE_OPTIMIZATION"
+|	"INDEX_MERGE"
+|	"NO_INDEX_MERGE"
+|	"NO_GROUP_INDEX"
+|	"INDEX"
+|	"NO_INDEX"
+|	"JOIN_INDEX"
+|	"NO_JOIN_INDEX"
 
 SubqueryOptimizerHintName:
 	"SEMIJOIN"
@@ -608,7 +595,6 @@ NullaryHintName:
 |	"STREAM_AGG"
 |	"AGG_TO_COP"
 |	"LIMIT_TO_COP"
-|	"NO_INDEX_MERGE"
 |	"READ_CONSISTENT_REPLICA"
 |	"IGNORE_PLAN_CACHE"
 
@@ -649,6 +635,17 @@ Identifier:
 |	"SET_VAR"
 |	"RESOURCE_GROUP"
 |	"QB_NAME"
+|	"DERIVED_CONDITION_PUSHDOWN"
+|	"NO_DERIVED_CONDITION_PUSHDOWN"
+|	"GROUP_INDEX"
+|	"NO_GROUP_INDEX"
+|	"INDEX"
+|	"NO_INDEX"
+|	"JOIN_INDEX"
+|	"NO_JOIN_INDEX"
+|	"ORDER_INDEX"
+|	"NO_ORDER_INDEX"
+|	"SUBQUERY"
 /* TiDB hint names */
 |	"AGG_TO_COP"
 |	"LIMIT_TO_COP"

@@ -4192,16 +4192,6 @@ func TestOptimizerHints(t *testing.T) {
 	require.Equal(t, "agg_to_cop", hints[0].HintName.L)
 	require.Equal(t, "agg_to_cop", hints[1].HintName.L)
 
-	// Test NO_INDEX_MERGE
-	stmt, _, err = p.Parse("select /*+ NO_INDEX_MERGE(), no_index_merge() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
-	require.NoError(t, err)
-	selectStmt = stmt[0].(*ast.SelectStmt)
-
-	hints = selectStmt.TableHints
-	require.Len(t, hints, 2)
-	require.Equal(t, "no_index_merge", hints[0].HintName.L)
-	require.Equal(t, "no_index_merge", hints[1].HintName.L)
-
 	// Test READ_CONSISTENT_REPLICA
 	stmt, _, err = p.Parse("select /*+ READ_CONSISTENT_REPLICA(), read_consistent_replica() */ c1, c2 from t1, t2 where t1.c1 = t2.c1", "", "")
 	require.NoError(t, err)
