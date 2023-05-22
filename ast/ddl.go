@@ -44,6 +44,7 @@ var (
 	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
 	_ DDLNode = &RepairTableStmt{}
+	_ DDLNode = &AdminRepairTableStmt{}
 	_ DDLNode = &OptimizeTableStmt{}
 	_ DDLNode = &CheckTableStmt{}
 
@@ -1987,20 +1988,20 @@ func (c *CheckTableStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(c)
 }
 
-// RepairTableStmt is a statement to repair tableInfo.
-type RepairTableStmt struct {
+// AdminRepairTableStmt is a statement to repair tableInfo.
+type AdminRepairTableStmt struct {
 	ddlNode
 	Table      *TableName
 	CreateStmt *CreateTableStmt
 }
 
 // Accept implements Node Accept interface.
-func (n *RepairTableStmt) Accept(v Visitor) (Node, bool) {
+func (n *AdminRepairTableStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*RepairTableStmt)
+	n = newNode.(*AdminRepairTableStmt)
 	node, ok := n.Table.Accept(v)
 	if !ok {
 		return n, false
@@ -2015,7 +2016,7 @@ func (n *RepairTableStmt) Accept(v Visitor) (Node, bool) {
 }
 
 // Restore implements Node interface.
-func (n *RepairTableStmt) Restore(ctx *format.RestoreCtx) error {
+func (n *AdminRepairTableStmt) Restore(ctx *format.RestoreCtx) error {
 	ctx.WriteKeyWord("ADMIN REPAIR TABLE ")
 	if err := n.Table.Restore(ctx); err != nil {
 		return errors.Annotatef(err, "An error occurred while restore RepairTableStmt.table : [%v]", n.Table)
@@ -2023,6 +2024,48 @@ func (n *RepairTableStmt) Restore(ctx *format.RestoreCtx) error {
 	ctx.WritePlain(" ")
 	if err := n.CreateStmt.Restore(ctx); err != nil {
 		return errors.Annotatef(err, "An error occurred while restore RepairTableStmt.createStmt : [%v]", n.CreateStmt)
+	}
+	return nil
+}
+
+// RepairTableStmt is a statement to repair tableInfo.
+// See https://dev.mysql.com/doc/refman/8.0/en/repair-table.html
+type RepairTableStmt struct {
+	ddlNode
+	Tables []*TableName
+	Quick  bool
+}
+
+// Accept implements Node Accept interface.
+func (n *RepairTableStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*RepairTableStmt)
+	for i := range n.Tables {
+		node, ok := n.Tables[i].Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Tables[i] = node.(*TableName)
+	}
+	return v.Leave(n)
+}
+
+// Restore implements Node interface.
+func (n *RepairTableStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("REPAIR TABLE ")
+	for i, v := range n.Tables {
+		if i != 0 {
+			ctx.WritePlain(", ")
+		}
+		if err := v.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore RepairTableStmt.Tables[%d]", i)
+		}
+	}
+	if n.Quick {
+		ctx.WritePlain(" QUICK")
 	}
 	return nil
 }

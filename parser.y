@@ -10159,9 +10159,16 @@ AdminStmt:
 			Quick:  $4.(bool),
 		}
 	}
-|	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
+|	"REPAIR" "TABLE" TableNameList QuickOptional
 	{
 		$$ = &ast.RepairTableStmt{
+			Tables: $3.([]*ast.TableName),
+			Quick:  $4.(bool),
+		}
+	}
+|	"ADMIN" "REPAIR" "TABLE" TableName CreateTableStmt
+	{
+		$$ = &ast.AdminRepairTableStmt{
 			Table:      $4.(*ast.TableName),
 			CreateStmt: $5.(*ast.CreateTableStmt),
 		}

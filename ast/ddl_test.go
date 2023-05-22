@@ -43,6 +43,7 @@ func TestDDLVisitorCover(t *testing.T) {
 		{&CheckTableStmt{Tables: []*TableName{{}, {}}}, 0, 0},
 		{&RenameTableStmt{TableToTables: []*TableToTable{}}, 0, 0},
 		{&TruncateTableStmt{Table: &TableName{}}, 0, 0},
+		{&RepairTableStmt{Tables: []*TableName{}}, 0, 0},
 
 		// TODO: cover children
 		{&AlterTableStmt{Table: &TableName{}, Specs: []*AlterTableSpec{alterTableSpec}}, 0, 0},
