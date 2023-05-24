@@ -985,7 +985,7 @@ AAAAAAAAAAAA5gm5Mg==
 		{"begin pessimistic", true, "BEGIN PESSIMISTIC"},
 		{"begin optimistic", true, "BEGIN OPTIMISTIC"},
 
-		// for repair table mode.
+		// for admin repair table mode.
 		{"ADMIN REPAIR TABLE t CREATE TABLE t (a int)", true, "ADMIN REPAIR TABLE `t` CREATE TABLE `t` (`a` INT)"},
 		{"ADMIN REPAIR TABLE t CREATE TABLE t (a char(1))", true, "ADMIN REPAIR TABLE `t` CREATE TABLE `t` (`a` CHAR(1))"},
 		{"ADMIN REPAIR TABLE t CREATE TABLE t (a char(1), b int)", true, "ADMIN REPAIR TABLE `t` CREATE TABLE `t` (`a` CHAR(1),`b` INT)"},
@@ -1007,6 +1007,13 @@ AAAAAAAAAAAA5gm5Mg==
 		{"CHECK TABLE t QUICK", true, "CHECK TABLE `t` QUICK"},
 		{"CHECK TABLE t1,t2", true, "CHECK TABLE `t1`, `t2`"},
 		{"CHECK TABLE t1,t2 QUICK", true, "CHECK TABLE `t1`, `t2` QUICK"},
+
+		// for repair table mode
+		{"REPAIR TABLE", false, ""},
+		{"REPAIR TABLE t", true, "REPAIR TABLE `t`"},
+		{"REPAIR TABLE t QUICK", true, "REPAIR TABLE `t` QUICK"},
+		{"REPAIR TABLE t1,t2", true, "REPAIR TABLE `t1`, `t2`"},
+		{"REPAIR TABLE t1,t2 QUICK", true, "REPAIR TABLE `t1`, `t2` QUICK"},
 
 		// for alter instance.
 		{"ALTER INSTANCE RELOAD TLS", true, "ALTER INSTANCE RELOAD TLS"},
