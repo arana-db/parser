@@ -10349,11 +10349,11 @@ ShowStmt:
 			Table: $4.(*ast.TableName),
 		}
 	}
-|	"SHOW" "DATABASE" "RULES" "FROM" DBName
+|	"SHOW" "DATABASE" "RULES" "FROM" TableName
 	{
 		$$ = &ast.ShowStmt{
 			Tp:     ast.ShowDatabaseRules,
-			DBName: $5,
+			Table: $5.(*ast.TableName),
 		}
 	}
 |	"SHOW" "SHARDING" "TABLE" "FROM" DBName

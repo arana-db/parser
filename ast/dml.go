@@ -2735,7 +2735,9 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		}
 	case ShowDatabaseRules:
 		ctx.WriteKeyWord("DATABASE RULES FROM ")
-		ctx.WriteName(n.DBName)
+		if err := n.Table.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowDatabaseRules.Table")
+		}
 	case ShowShardingTable:
 		ctx.WriteKeyWord("SHARDING TABLE FROM ")
 		ctx.WriteName(n.DBName)
