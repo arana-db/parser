@@ -10352,7 +10352,7 @@ ShowStmt:
 |	"SHOW" "DATABASE" "RULES" "FROM" TableName
 	{
 		$$ = &ast.ShowStmt{
-			Tp:     ast.ShowDatabaseRules,
+			Tp:    ast.ShowDatabaseRules,
 			Table: $5.(*ast.TableName),
 		}
 	}
@@ -10647,6 +10647,15 @@ ShowTargetFilterable:
 			Tp:     ast.ShowTables,
 			DBName: $3,
 			Full:   $1.(bool),
+		}
+	}
+|	"EXTENDED" OptFull "TABLES" ShowDatabaseNameOpt
+	{
+		$$ = &ast.ShowStmt{
+			Tp:       ast.ShowTables,
+			DBName:   $4,
+			Full:     $2.(bool),
+			Extended: true,
 		}
 	}
 |	"OPEN" "TABLES" ShowDatabaseNameOpt
