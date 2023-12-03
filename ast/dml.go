@@ -2676,6 +2676,11 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 			ctx.WriteKeyWord("FULL ")
 		}
 	}
+	restoreOptExtended := func() {
+		if n.Extended {
+			ctx.WriteKeyWord("EXTENDED ")
+		}
+	}
 	restoreShowDatabaseNameOpt := func() {
 		if n.DBName != "" {
 			// FROM OR IN
@@ -2905,6 +2910,7 @@ func (n *ShowStmt) Restore(ctx *format.RestoreCtx) error {
 		case ShowCharset:
 			ctx.WriteKeyWord("CHARSET")
 		case ShowTables:
+			restoreOptExtended()
 			restoreOptFull()
 			ctx.WriteKeyWord("TABLES")
 			restoreShowDatabaseNameOpt()

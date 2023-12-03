@@ -1083,6 +1083,10 @@ func TestDBAStmt(t *testing.T) {
 		{`SHOW FIELDS FROM City;`, true, "SHOW COLUMNS IN `City`"},
 		{`SHOW TRIGGERS LIKE 't'`, true, "SHOW TRIGGERS LIKE _UTF8MB4't'"},
 		{`SHOW DATABASES LIKE 'test2'`, true, "SHOW DATABASES LIKE _UTF8MB4'test2'"},
+		{`SHOW TABLES LIKE 't%'`, true, "SHOW TABLES LIKE _UTF8MB4't%'"},
+		{`SHOW FULL TABLES LIKE 't%'`, true, "SHOW FULL TABLES LIKE _UTF8MB4't%'"},
+		{`SHOW EXTENDED TABLES LIKE 't%'`, true, "SHOW EXTENDED TABLES LIKE _UTF8MB4't%'"},
+		{`SHOW EXTENDED FULL TABLES LIKE 't%'`, true, "SHOW EXTENDED FULL TABLES LIKE _UTF8MB4't%'"},
 		// PROCEDURE and FUNCTION are currently not supported.
 		// And FUNCTION reuse show procedure status process logic.
 		{`SHOW PROCEDURE STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`=_UTF8MB4'test'"},
