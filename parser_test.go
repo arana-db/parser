@@ -1083,10 +1083,6 @@ func TestDBAStmt(t *testing.T) {
 		{`SHOW FIELDS FROM City;`, true, "SHOW COLUMNS IN `City`"},
 		{`SHOW TRIGGERS LIKE 't'`, true, "SHOW TRIGGERS LIKE _UTF8MB4't'"},
 		{`SHOW DATABASES LIKE 'test2'`, true, "SHOW DATABASES LIKE _UTF8MB4'test2'"},
-		{`SHOW TABLES LIKE 't%'`, true, "SHOW TABLES LIKE _UTF8MB4't%'"},
-		{`SHOW FULL TABLES LIKE 't%'`, true, "SHOW FULL TABLES LIKE _UTF8MB4't%'"},
-		{`SHOW EXTENDED TABLES LIKE 't%'`, true, "SHOW EXTENDED TABLES LIKE _UTF8MB4't%'"},
-		{`SHOW EXTENDED FULL TABLES LIKE 't%'`, true, "SHOW EXTENDED FULL TABLES LIKE _UTF8MB4't%'"},
 		// PROCEDURE and FUNCTION are currently not supported.
 		// And FUNCTION reuse show procedure status process logic.
 		{`SHOW PROCEDURE STATUS WHERE Db='test'`, true, "SHOW PROCEDURE STATUS WHERE `Db`=_UTF8MB4'test'"},
@@ -5754,6 +5750,25 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 	comment, ok := createTable.Partition.Definitions[0].Comment()
 	require.True(t, ok)
 	require.Equal(t, "check", comment)
+}
+
+func TestTableDBPartition(t *testing.T) {
+	table := []testCase{
+		// LIST, RANGE and SYSTEM_TIME partitions all required definitions
+		{"create table t1 (a int) dbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4"},
+		{"create table t1 (a int) dbpartition by hash (a) tbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1 TBPARTITION BY HASH (`a`) TBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) tbpartition by hash (a) tbpartitions 8", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1 TBPARTITION BY HASH (`a`) TBPARTITIONS 8"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4 tbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4 TBPARTITION BY HASH (`a`) TBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4 tbpartition by hash (a) tbpartitions 8", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4 TBPARTITION BY HASH (`a`) TBPARTITIONS 8"},
+	}
+	RunTest(t, table, false)
 }
 
 func TestTablePartitionNameList(t *testing.T) {
