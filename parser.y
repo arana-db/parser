@@ -10717,6 +10717,15 @@ ShowTargetFilterable:
 			Full:   $1.(bool),
 		}
 	}
+|	"EXTENDED" OptFull "TABLES" ShowDatabaseNameOpt
+	{
+		$$ = &ast.ShowStmt{
+			Tp:       ast.ShowTables,
+			DBName:   $4,
+			Full:     $2.(bool),
+			Extended: true,
+		}
+	}
 |	"OPEN" "TABLES" ShowDatabaseNameOpt
 	{
 		$$ = &ast.ShowStmt{
