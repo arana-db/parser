@@ -3886,8 +3886,9 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 type PartitionOptions struct {
 	node
 	PartitionMethod
-	Sub         *PartitionMethod
-	Definitions []*PartitionDefinition
+	Sub           *PartitionMethod
+	Definitions   []*PartitionDefinition
+	PartitionFrom int
 }
 
 // Validate checks if the partition is well-formed.
@@ -3947,24 +3948,44 @@ func (n *PartitionOptions) Validate() error {
 }
 
 func (n *PartitionOptions) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("PARTITION BY ")
+	if n.PartitionFrom == 1 {
+		ctx.WriteKeyWord("DBPARTITION BY ")
+	} else {
+		ctx.WriteKeyWord("PARTITION BY ")
+	}
 	if err := n.PartitionMethod.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore PartitionOptions.PartitionMethod")
 	}
 
 	if n.Num > 0 && len(n.Definitions) == 0 {
-		ctx.WriteKeyWord(" PARTITIONS ")
-		ctx.WritePlainf("%d", n.Num)
+		if n.PartitionFrom == 1 {
+			ctx.WriteKeyWord(" DBPARTITIONS ")
+			ctx.WritePlainf("%d", n.Num)
+		} else {
+			ctx.WriteKeyWord(" PARTITIONS ")
+			ctx.WritePlainf("%d", n.Num)
+		}
 	}
 
 	if n.Sub != nil {
-		ctx.WriteKeyWord(" SUBPARTITION BY ")
-		if err := n.Sub.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore PartitionOptions.Sub")
-		}
-		if n.Sub.Num > 0 {
-			ctx.WriteKeyWord(" SUBPARTITIONS ")
-			ctx.WritePlainf("%d", n.Sub.Num)
+		if n.PartitionFrom == 1 {
+			ctx.WriteKeyWord(" TBPARTITION BY ")
+			if err := n.Sub.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore PartitionOptions.Sub")
+			}
+			if n.Sub.Num > 0 {
+				ctx.WriteKeyWord(" TBPARTITIONS ")
+				ctx.WritePlainf("%d", n.Sub.Num)
+			}
+		} else {
+			ctx.WriteKeyWord(" SUBPARTITION BY ")
+			if err := n.Sub.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore PartitionOptions.Sub")
+			}
+			if n.Sub.Num > 0 {
+				ctx.WriteKeyWord(" SUBPARTITIONS ")
+				ctx.WritePlainf("%d", n.Sub.Num)
+			}
 		}
 	}
 

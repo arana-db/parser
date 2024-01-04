@@ -208,6 +208,7 @@ import (
 	order             "ORDER"
 	outer             "OUTER"
 	over              "OVER"
+	dbpartition       "DBPARTITION"
 	partition         "PARTITION"
 	percentRank       "PERCENT_RANK"
 	precisionType     "PRECISION"
@@ -589,6 +590,9 @@ import (
 	subject               "SUBJECT"
 	subpartition          "SUBPARTITION"
 	subpartitions         "SUBPARTITIONS"
+	tbpartition           "TBPARTITION"
+	tbpartitions          "TBPARTITIONS"
+	dbpartitions          "DBPARTITIONS"
 	super                 "SUPER"
 	swaps                 "SWAPS"
 	switchesSym           "SWITCHES"
@@ -1180,6 +1184,9 @@ import (
 	SubPartitionMethod                     "SubPartition method"
 	SubPartitionOpt                        "SubPartition option"
 	SubPartitionNumOpt                     "SubPartition NUM option"
+	TBPartitionOpt                         "TBPartition option"
+	TBPartitionNumOpt                      "TBPartition NUM option"
+	DBPartitionNumOpt                      "DBPartition NUM option"
 	TableAliasRefList                      "table alias reference list"
 	TableAsName                            "table alias name"
 	TableAsNameOpt                         "table alias name optional"
@@ -3803,6 +3810,25 @@ PartitionOpt:
 			PartitionMethod: *method,
 			Sub:             sub,
 			Definitions:     defs,
+			PartitionFrom:   0,
+		}
+		if err := opt.Validate(); err != nil {
+			yylex.AppendError(err)
+			return 1
+		}
+		$$ = opt
+	}
+|	"DBPARTITION" "BY" PartitionMethod DBPartitionNumOpt TBPartitionOpt PartitionDefinitionListOpt
+	{
+		method := $3.(*ast.PartitionMethod)
+		method.Num = $4.(uint64)
+		sub, _ := $5.(*ast.PartitionMethod)
+		defs, _ := $6.([]*ast.PartitionDefinition)
+		opt := &ast.PartitionOptions{
+			PartitionMethod: *method,
+			Sub:             sub,
+			Definitions:     defs,
+			PartitionFrom:   1,
 		}
 		if err := opt.Validate(); err != nil {
 			yylex.AppendError(err)
@@ -3917,6 +3943,17 @@ SubPartitionOpt:
 		$$ = method
 	}
 
+TBPartitionOpt:
+	{
+		$$ = nil
+	}
+|	"TBPARTITION" "BY" SubPartitionMethod TBPartitionNumOpt
+	{
+		method := $3.(*ast.PartitionMethod)
+		method.Num = $4.(uint64)
+		$$ = method
+	}
+
 SubPartitionNumOpt:
 	{
 		$$ = uint64(0)
@@ -3931,6 +3968,20 @@ SubPartitionNumOpt:
 		$$ = res
 	}
 
+TBPartitionNumOpt:
+	{
+		$$ = uint64(1)
+	}
+|	"TBPARTITIONS" LengthNum
+	{
+		res := $2.(uint64)
+		if res == 0 {
+			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("tbpartitions"))
+			return 1
+		}
+		$$ = res
+	}
+
 PartitionNumOpt:
 	{
 		$$ = uint64(0)
@@ -3940,6 +3991,20 @@ PartitionNumOpt:
 		res := $2.(uint64)
 		if res == 0 {
 			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("partitions"))
+			return 1
+		}
+		$$ = res
+	}
+
+DBPartitionNumOpt:
+	{
+		$$ = uint64(1)
+	}
+|	"DBPARTITIONS" LengthNum
+	{
+		res := $2.(uint64)
+		if res == 0 {
+			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("dbpartitions"))
 			return 1
 		}
 		$$ = res
@@ -5855,6 +5920,9 @@ UnReservedKeyword:
 |	"OPEN"
 |	"SUBPARTITIONS"
 |	"SUBPARTITION"
+|	"DBPARTITIONS"
+|	"TBPARTITIONS"
+|	"TBPARTITION"
 |	"TABLES"
 |	"TABLESPACE"
 |	"TEXT"

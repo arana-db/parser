@@ -5756,6 +5756,25 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 	require.Equal(t, "check", comment)
 }
 
+func TestTableDBPartition(t *testing.T) {
+	table := []testCase{
+		// LIST, RANGE and SYSTEM_TIME partitions all required definitions
+		{"create table t1 (a int) dbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4"},
+		{"create table t1 (a int) dbpartition by hash (a) tbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1 TBPARTITION BY HASH (`a`) TBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) tbpartition by hash (a) tbpartitions 8", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 1 TBPARTITION BY HASH (`a`) TBPARTITIONS 8"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4 tbpartition by hash (a)", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4 TBPARTITION BY HASH (`a`) TBPARTITIONS 1"},
+		{"create table t1 (a int) dbpartition by hash (a) dbpartitions 4 tbpartition by hash (a) tbpartitions 8", true,
+			"CREATE TABLE `t1` (`a` INT) DBPARTITION BY HASH (`a`) DBPARTITIONS 4 TBPARTITION BY HASH (`a`) TBPARTITIONS 8"},
+	}
+	RunTest(t, table, false)
+}
+
 func TestTablePartitionNameList(t *testing.T) {
 	table := []testCase{
 		{`select * from t partition (p0,p1)`, true, ""},
